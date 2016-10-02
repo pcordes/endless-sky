@@ -28,8 +28,8 @@ if env["mode"] != "debug":
 if env["mode"] == "debug":
 	flags += ["-g"]
 if env["mode"] == "profile":
-	flags += ["-pg"]
-	env.Append(LINKFLAGS = ["-pg"])
+	flags += ["-g",  "-pg"]
+	env.Append(LINKFLAGS = ["-g", "-pg"])
 
 # Required build flags. If you want to use SSE optimization, you can turn on
 # -msse3 or (if just building for your own computer) -march=native.
