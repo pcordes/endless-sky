@@ -67,5 +67,11 @@ private:
 };
 
 
+// Default constructor.
+inline Mask::Mask() : radius(0.) {}
+// Check whether a mask was successfully loaded.  inline to save code size
+inline bool Mask::IsLoaded() const {
+	return !outline.empty();
+}
 
 #endif

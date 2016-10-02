@@ -12,6 +12,9 @@ PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
 #include "Point.h"
 
+
+#ifndef INLINE_POINT
+
 #ifndef __SSE3__
 #include <algorithm>
 #include <cmath>
@@ -41,7 +44,7 @@ Point::Point(double x, double y)
 }
 
 
-
+/*
 Point::Point(const Point &point)
 #ifdef __SSE3__
 	: v(point.v)
@@ -50,9 +53,10 @@ Point::Point(const Point &point)
 #endif
 {
 }
+*/
 
 
-
+/*
 Point &Point::operator=(const Point &point)
 {
 #ifdef __SSE3__
@@ -63,7 +67,7 @@ Point &Point::operator=(const Point &point)
 #endif
 	return *this;
 }
-
+*/
 
 
 // Check if the point is anything but (0, 0).
@@ -105,7 +109,7 @@ Point &Point::operator+=(const Point &point)
 
 
 
-Point Point::operator-(const Point &point) const
+Point Point::operator-(const Point point) const
 {
 #ifdef __SSE3__
 	return Point(v - point.v);
@@ -116,7 +120,7 @@ Point Point::operator-(const Point &point) const
 
 
 
-Point &Point::operator-=(const Point &point)
+Point &Point::operator-=(const Point point)
 {
 #ifdef __SSE3__
 	v -= point.v;
@@ -355,4 +359,6 @@ inline Point::Point(const __m128d &v)
 	: v(v)
 {
 }
+#endif
+
 #endif

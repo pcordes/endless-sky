@@ -92,8 +92,27 @@ private:
 
 
 // This gets called a lot, so inline it for speed.
-inline int64_t Outfit::Cost() const { return cost; }
+inline       int64_t Outfit::Cost() const        { return cost; }
+
+inline const string &Outfit::Name() const        { return name; }
+inline const string &Outfit::Category() const    { return category; }
+inline const string &Outfit::Description() const { return description; }
+// Get the image to display in the outfitter when buying this item.
+inline const Sprite *Outfit::Thumbnail() const   { return thumbnail; }
+
+inline double Outfit::Get(const string &attribute) const
+{
+	auto it = attributes.find(attribute);
+	return (it == attributes.end()) ? 0. : it->second;
+}
 
 
+// Get this outfit's engine flare sprite, if any.
+inline const vector<pair<Body, int>> &Outfit::FlareSprites() const { return flareSprites; }
+inline const map<const Sound *, int> &Outfit::FlareSounds()  const { return flareSounds; }
+// Get the afterburner effect, if any.
+inline const map<const Effect *, int> &Outfit::AfterburnerEffects() const { return afterburnerEffects; }
+// Get the sprite this outfit uses when dumped into space.
+inline const Sprite *Outfit::FlotsamSprite() const { return flotsamSprite; }
 
 #endif

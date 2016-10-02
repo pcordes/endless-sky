@@ -80,41 +80,13 @@ void Outfit::Load(const DataNode &node)
 
 
 
-const string &Outfit::Name() const
-{
-	return name;
-}
-
-
-
-const string &Outfit::Category() const
-{
-	return category;
-}
-
-
-
-const string &Outfit::Description() const
-{
-	return description;
-}
-
-
-
-// Get the image to display in the outfitter when buying this item.
-const Sprite *Outfit::Thumbnail() const
-{
-	return thumbnail;
-}
-
-
-
+/*
 double Outfit::Get(const string &attribute) const
 {
 	auto it = attributes.find(attribute);
 	return (it == attributes.end()) ? 0. : it->second;
 }
-
+*/
 
 
 const map<string, double> &Outfit::Attributes() const
@@ -190,33 +162,3 @@ void Outfit::Reset(const string &attribute, double value)
 	attributes[attribute] = value;
 }
 
-
-	
-// Get this outfit's engine flare sprite, if any.
-const vector<pair<Body, int>> &Outfit::FlareSprites() const
-{
-	return flareSprites;
-}
-
-
-
-const map<const Sound *, int> &Outfit::FlareSounds() const
-{
-	return flareSounds;
-}
-
-
-
-// Get the afterburner effect, if any.
-const map<const Effect *, int> &Outfit::AfterburnerEffects() const
-{
-	return afterburnerEffects;
-}
-
-
-
-// Get the sprite this outfit uses when dumped into space.
-const Sprite *Outfit::FlotsamSprite() const
-{
-	return flotsamSprite;
-}

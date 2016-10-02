@@ -211,14 +211,6 @@ namespace {
 
 
 
-// Default constructor.
-Mask::Mask()
-	: radius(0.)
-{
-}
-
-
-
 // Construct a mask from the alpha channel of an SDL surface. (The surface
 // must therefore be a 4-byte RGBA format.)
 void Mask::Create(ImageBuffer *image)
@@ -233,13 +225,6 @@ void Mask::Create(ImageBuffer *image)
 	radius = Radius(outline);
 }
 
-
-
-// Check whether a mask was successfully loaded.
-bool Mask::IsLoaded() const
-{
-	return !outline.empty();
-}
 
 
 
