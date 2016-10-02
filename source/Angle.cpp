@@ -29,8 +29,8 @@ namespace {
 	// plenty accurate to me. At that step size, the lookup table is exactly 1 MB.
 	static const int32_t STEPS = 0x10000;
 	static const int32_t MASK = STEPS - 1;
-	double DEG_TO_STEP = STEPS / 360.;
-	double STEP_TO_RAD = PI / (STEPS / 2);
+	static const double DEG_TO_STEP = STEPS / 360.;
+	static const double STEP_TO_RAD = PI / (STEPS / 2);
 }
 
 
@@ -39,6 +39,24 @@ namespace {
 Angle Angle::Random()
 {
 	return Angle(static_cast<int32_t>(Random::Int(STEPS)));
+}
+
+
+// same behaviour if this is a nested class & member in Angle
+class foo {
+public:
+	foo();
+	alignas(64) float lut[STEPS];
+};
+static const foo test_primitive;
+
+//Point Angle::unitVectorCache.lut[STEPS];  // only the instance is static
+foo::foo() {
+	// no wasted memset
+	for(int i = 0; i < STEPS; ++i) {
+		float radians = i * STEP_TO_RAD;
+		lut[i] = sinf(radians);
+	}
 }
 
 
@@ -53,74 +71,63 @@ Angle Angle::Random(double range)
 }
 
 
+/*
+const float Angle::testarray[14] = { 1, 2, 3, 4 };
+const Point Angle::unitCache_flat[2] = { {1,2}, {2, 3} };
 
-// Default constructor: generates an angle pointing straight up.
-Angle::Angle()
-	: angle(0)
+Point Angle::testUnit_byval() const
 {
+	return unitVectorCache.lut[angle];
+}
+const Point &Angle::testUnit_byref() const
+{
+	return unitVectorCache.lut[angle];
+}
+*/
+
+Angle::UnitVectorCache::UnitVectorCache()
+{
+	// lut[] is zeroed before this loop runs, by the Point() default constructor :(
+	for(int i = 0; i < STEPS; ++i)
+	{
+		double radians = i * STEP_TO_RAD;
+		// The graphics use the usual screen coordinate system, meaning that
+		// positive Y is down rather than up. Angles are clock angles, i.e.
+		// 0 is 12:00 and angles increase in the clockwise direction. So, an
+		// angle of 0 degrees is pointing in the direction (0, -1).
+		lut[i] = { sin(radians), -cos(radians) };
+//		cache[i] = Point(sin(radians), -cos(radians));
+	}
 }
 
 
+/*
+Point Angle::UnitVectorCache::lut[STEPS];  // static member of the nested class
 
-// Convert an angle in degrees into an Angle object.
-Angle::Angle(double degrees)
-	: angle(static_cast<int64_t>(degrees * DEG_TO_STEP + .5) & MASK)
+Angle::UnitVectorCache::UnitVectorCache()
 {
+	for(int i = 0; i < STEPS; ++i)
+	{
+		double radians = i * STEP_TO_RAD;
+		// The graphics use the usual screen coordinate system, meaning that
+		// positive Y is down rather than up. Angles are clock angles, i.e.
+		// 0 is 12:00 and angles increase in the clockwise direction. So, an
+		// angle of 0 degrees is pointing in the direction (0, -1).
+		lut[i] = { sin(radians), -cos(radians) };
+//		cache[i] = Point(sin(radians), -cos(radians));
+	}
+
+
 }
 
-
-
-// Construct an angle pointing in the direction of the given vector.
-Angle::Angle(const Point &point)
-	: Angle(TO_DEG * atan2(point.X(), -point.Y()))
+Point Angle::testUnit() const
 {
+	return UnitVectorCache::lut[angle];
 }
+*/
 
 
-
-Angle Angle::operator+(const Angle &other) const
-{
-	Angle result = *this;
-	result += other;
-	return result;
-}
-
-
-
-Angle &Angle::operator+=(const Angle &other)
-{
-	angle += other.angle;
-	angle &= MASK;
-	return *this;
-}
-
-
-
-Angle Angle::operator-(const Angle &other) const
-{
-	Angle result = *this;
-	result -= other;
-	return result;
-}
-
-
-
-Angle &Angle::operator-=(const Angle &other)
-{
-	angle -= other.angle;
-	angle &= MASK;
-	return *this;
-}
-
-
-
-Angle Angle::operator-() const
-{
-	return Angle((-angle) & MASK);
-}
-
-
-
+/*
 // Get a unit vector in the direction of this angle.
 Point Angle::Unit() const
 {
@@ -141,7 +148,69 @@ Point Angle::Unit() const
 	}
 	return cache[angle];
 }
+*/
 
+/*
+static Point unitVectors[STEPS];
+static constexpr Point* BuildUnitCache()
+{
+	for(int i = 0; i < STEPS; ++i)
+	{
+		double radians = i * STEP_TO_RAD;
+		// The graphics use the usual screen coordinate system, meaning that
+		// positive Y is down rather than up. Angles are clock angles, i.e.
+		// 0 is 12:00 and angles increase in the clockwise direction. So, an
+		// angle of 0 degrees is pointing in the direction (0, -1).
+//		unitVectors[i] = { sin(radians), -cos(radians) };
+//		unitVectors[i] = Point(sin(radians), -cos(radians));
+		unitVectors[i].X() = sin(radians);
+		unitVectors[i].Y() =-cos(radians);
+	}
+	return unitVectors;
+}
+static const Point* Angle::unitCache = BuildUnitCache();
+*/
+
+alignas(64) static struct {
+    alignas(16) double x;
+    double y;
+} unitVectors[STEPS];
+
+static constexpr const Point* BuildUnitCache()
+{
+	for(int i = 0; i < STEPS; ++i)
+	{
+		double radians = i * STEP_TO_RAD;
+		// The graphics use the usual screen coordinate system, meaning that
+		// positive Y is down rather than up. Angles are clock angles, i.e.
+		// 0 is 12:00 and angles increase in the clockwise direction. So, an
+		// angle of 0 degrees is pointing in the direction (0, -1).
+//		unitVectors[i] = { sin(radians), -cos(radians) };
+//		unitVectors[i] = Point(sin(radians), -cos(radians));
+		unitVectors[i].x =  sin(radians);
+		unitVectors[i].y = -cos(radians);
+	}
+//	return unitVectors;
+	return (const Point*) unitVectors;
+}
+const Point* Angle::unitCache = BuildUnitCache();
+
+const Point &Angle::Unit() const
+{
+//	return *reinterpret_cast<Point*>(&unitVectors[angle]);  // violates strict aliasing
+	//return Point(unitVectors[angle].x, unitVectors[angle].y);
+	return unitCache[angle];
+}
+
+
+static vector<Point> local_cache;
+Point Angle_LUT(int32_t idx) {
+	return local_cache[idx];
+}
+
+const Point & Angle_LUT_byref(int32_t idx) {
+	return local_cache[idx];
+}
 
 
 // Convert an angle back to a value in degrees.
@@ -150,25 +219,5 @@ double Angle::Degrees() const
 	// Most often when this function is used, it's in settings where it makes
 	// sense to return an angle in the range [-180, 180) rather than in the
 	// Angle's native range of [0, 360).
-	return angle / DEG_TO_STEP - 360. * (angle >= STEPS / 2);
-}
-
-
-	
-// Return a point rotated by this angle around (0, 0).
-Point Angle::Rotate(const Point &point) const
-{
-	// If using the normal mathematical coordinate system, this would be easier.
-	// Since we're not, the math is a tiny bit less elegant:
-	Point unit = Unit();
-	return Point(-unit.Y() * point.X() - unit.X() * point.Y(),
-		-unit.Y() * point.Y() + unit.X() * point.X());
-}
-
-
-
-// Constructor using Angle's internal representation.
-Angle::Angle(int32_t angle)
-	: angle(angle)
-{
+	return angle * (1. / DEG_TO_STEP)  -  360. * (angle >= STEPS / 2);
 }
