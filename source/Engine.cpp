@@ -1314,14 +1314,10 @@ void Engine::CalculateStep()
 	// Occasionally have some ship hail you.
 	if(!Random::Int(600) && !player.IsDead() && !ships.empty())
 	{
-		shared_ptr<Ship> source;
-		unsigned i = Random::Int(ships.size());
-		for(const shared_ptr<Ship> &it : ships)
-			if(!i--)
-			{
-				source = it;
-				break;
-			}
+		auto it = ships.cbegin();
+		advance(it, Random::Int(ships.size()));
+		const Ship *source = it->get();
+
 		if(source->GetGovernment() && !source->GetGovernment()->IsPlayer()
 				&& !source->IsDisabled() && source->Crew() && source->Cloaking() < 1.)
 		{
