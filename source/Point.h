@@ -71,9 +71,13 @@ public:
 	double Length() const;
 	double LengthSquared() const;
 	Point Unit() const;
+	bool InRange(double range) const { return LengthSquared() <= (range*range); }  // some use cases are <=, some are <
+	bool OutOfRange(double range) const { return LengthSquared() > (range*range); }
 	
 	double Distance(const Point &point) const;
 	double DistanceSquared(const Point &point) const;
+	bool InRange(const Point &other, double range) const { return DistanceSquared(other) <= (range*range); }
+	bool OutOfRange(const Point &other, double range) const { return DistanceSquared(other) > (range*range); }
 	
 	friend Point abs(const Point &p);
 	friend Point min(const Point &p, const Point &q);
@@ -113,10 +117,10 @@ inline const double &Point::Y() const { return y; }
 
 #ifndef __SSE3__
 #include <algorithm>
-#include <cmath>
-using namespace std;
 #endif
 
+#include <cmath>
+using namespace std;
 
 
 inline Point::Point()
@@ -451,7 +455,7 @@ inline Point max(const Point &p, const Point &q)
 
 #ifdef __SSE3__
 // Private constructor, using a vector.
-inline inline Point::Point(const __m128d &v)
+inline Point::Point(const __m128d &v)
 	: v(v)
 {
 }

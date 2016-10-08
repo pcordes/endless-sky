@@ -1118,7 +1118,7 @@ void AI::CircleAround(Ship &ship, Command &command, const Ship &target)
 {
 	Point direction = target.Position() - ship.Position();
 	command.SetTurn(TurnToward(ship, direction));
-	if(ship.Facing().Unit().Dot(direction) >= 0. && direction.Length() > 200.)
+	if(ship.Facing().Unit().Dot(direction) >= 0. && !direction.InRange(200.))
 		command |= Command::FORWARD;
 }
 
@@ -1257,7 +1257,7 @@ void AI::Attack(Ship &ship, Command &command, const Ship &target)
 		command |= Command::DEPLOY;
 	// If this ship only has long-range weapons, it should keep its distance
 	// instead of trying to close with the target ship.
-	if(shortestRange > 1000. && d.Length() < .5 * shortestRange)
+	if(shortestRange > 1000. && d.InRange(.5 * shortestRange))
 	{
 		command.SetTurn(TurnToward(ship, -d));
 		if(ship.Facing().Unit().Dot(d) <= 0.)
@@ -1271,11 +1271,13 @@ void AI::Attack(Ship &ship, Command &command, const Ship &target)
 	// Calculate this ship's "turning radius; that is, the smallest circle it
 	// can make while at full speed.
 	double stepsInFullTurn = 360. / ship.TurnRate();
-	double circumference = stepsInFullTurn * ship.Velocity().Length();
-	double diameter = max(200., circumference / PI);
-	
+	double circumference = stepsInFullTurn * ship.Velocity().Length();  // TODO: eliminate this sqrt as well.  downside: it makes the code worse to read.
+	double diameter = max(200., circumference * (1. / PI));
+//	double circumferenceSquared = stepsInFullTurn * stepsInFullTurn * ship.Velocity().LengthSquared();
+//	double diameterSquared = max(200. * 200.,  circumferenceSquared * (1. / PI / PI));
+
 	// This isn't perfect, but it works well enough.
-	if((ship.Facing().Unit().Dot(d) >= 0. && d.Length() > diameter)
+	if((ship.Facing().Unit().Dot(d) >= 0. && !d.InRange(diameter))
 			|| (ship.Velocity().Dot(d) < 0. && ship.Facing().Unit().Dot(d.Unit()) >= .9))
 		command |= Command::FORWARD;
 }
@@ -1462,28 +1464,29 @@ Point AI::StoppingPoint(const Ship &ship, bool &shouldReverse)
 	const Point &velocity = ship.Velocity();
 	const Angle &angle = ship.Facing();
 	double acceleration = ship.Acceleration();
-	double turnRate = ship.TurnRate();
+	double inverseTurnRate = 1. / ship.TurnRate();
 	shouldReverse = false;
 	
 	// If I were to turn around and stop now, where would that put me?
-	double v = velocity.Length();
-	if(!v)
+	double vSquared = velocity.LengthSquared();
+	if(!vSquared)
 		return position;
-	
+
+	double v = sqrt(vSquared);
 	// This assumes you're facing exactly the wrong way.
 	double degreesToTurn = TO_DEG * acos(min(1., max(-1., -velocity.Unit().Dot(angle.Unit()))));
-	double stopDistance = v * (degreesToTurn / turnRate);
+	double stopDistance = v * (degreesToTurn * inverseTurnRate);
 	// Sum of: v + (v - a) + (v - 2a) + ... + 0.
 	// The number of terms will be v / a.
 	// The average term's value will be v / 2. So:
-	stopDistance += .5 * v * v / acceleration;
+	stopDistance += .5 * vSquared / acceleration;
 	
 	if(ship.Attributes().Get("reverse thrust"))
 	{
 		// Figure out your reverse thruster stopping distance:
-		double reverseAcceleration = ship.Attributes().Get("reverse thrust") / ship.Mass();
-		double reverseDistance = v * (180. - degreesToTurn) / turnRate;
-		reverseDistance += .5 * v * v / reverseAcceleration;
+		double inverseRevAccel = ship.Mass() / ship.Attributes().Get("reverse thrust") ;
+		double reverseDistance = v * (180. - degreesToTurn) * inverseTurnRate;
+		reverseDistance += .5 * vSquared * inverseRevAccel;
 		
 		if(reverseDistance < stopDistance)
 		{

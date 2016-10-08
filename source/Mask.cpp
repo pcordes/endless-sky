@@ -262,7 +262,7 @@ double Mask::Collide(Point sA, Point vA, Angle facing) const
 // Check whether the mask contains the given point.
 bool Mask::Contains(Point point, Angle facing) const
 {
-	if(outline.empty() || point.Length() > radius)
+	if(outline.empty() || point.OutOfRange(radius))
 		return false;
 	
 	// Rotate into the mask's frame of reference.
