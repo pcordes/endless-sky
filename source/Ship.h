@@ -333,7 +333,8 @@ private:
 	void CreateExplosion(std::list<Effect> &effects, bool spread = false);
 	// Place a "spark" effect, like ionization or disruption.
 	void CreateSparks(std::list<Effect> &effects, const std::string &name, double amount);
-	
+	// crew and hull check
+	bool IsDisabledHelper() const;
 	
 private:
 	/* Protected member variables of the Body class:
@@ -363,7 +364,7 @@ private:
 	bool isYours = false;
 	bool isParked = false;
 	bool isOverheated = false;
-	bool isDisabled = false;
+	bool isDisabled = false;      // early-out for IsDisabled().  false means definitely not disabled, true means re-check crew and hull
 	bool isBoarding = false;
 	bool hasBoarded = false;
 	bool isThrusting = false;
@@ -441,5 +442,127 @@ private:
 };
 
 
+inline const string &Ship::Name() const { return name; }
+inline const string &Ship::ModelName() const { return modelName; }
+// Get this ship's description.
+inline const string &Ship::Description() const { return description; }
+// Get this ship's cost.
+inline int64_t Ship::Cost() const {
+	return attributes.Cost();
+}
+// Get the licenses needed to buy or operate this ship.
+inline const vector<string> &Ship::Licenses() const { return licenses; }
 
+// Set the name of this particular ship.
+inline void Ship::SetName(const string &name) { this->name = name; }
+// Set which system this ship is in.
+inline void Ship::SetSystem(const System *system) { currentSystem = system; }
+
+inline void Ship::SetIsSpecial(bool special) { isSpecial = special; }
+inline bool Ship::IsSpecial() const { return isSpecial; }
+
+inline void Ship::SetIsYours(bool yours) { isYours = yours; }
+inline bool Ship::IsYours() const { return isYours; }
+
+inline void Ship::SetIsParked(bool parked) { isParked = parked; }
+inline bool Ship::IsParked() const { return isParked; }
+
+inline const Personality &Ship::GetPersonality() const { return personality; }
+
+// Set the commands for this ship to follow this timestep.
+inline void Ship::SetCommands(const Command &command) { commands = command; }
+inline const Command &Ship::Commands() const { return commands; }
+
+inline const System *Ship::GetSystem() const { return currentSystem; }
+// If the ship is landed, get the planet it has landed on.
+inline const Planet *Ship::GetPlanet() const
+{
+	return zoom ? nullptr : landingPlanet;
+}
+
+inline bool Ship::IsCapturable() const { return isCapturable; }
+
+inline bool Ship::IsTargetable() const {
+	return (zoom == 1. && !explosionRate && !forget && !isInvisible &&
+		cloak < 1. && hull >= 0. && hyperspaceCount < 70);
+}
+
+inline bool Ship::IsOverheated() const { return isOverheated; }
+inline bool Ship::IsDisabled() const
+{
+	if(!isDisabled)
+		return false;
+	return IsDisabledHelper();
+}
+
+inline bool Ship::IsBoarding() const { return isBoarding; }
+inline bool Ship::IsLanding() const {
+	return landingPlanet;
+}
+
+
+inline bool Ship::CannotAct() const
+{
+	return (zoom != 1. || isDisabled || hyperspaceCount || pilotError || cloak);
+}
+
+inline double Ship::Cloaking() const
+{
+	return isInvisible ? 1. : cloak;
+}
+
+inline bool Ship::IsEnteringHyperspace() const {
+	return hyperspaceSystem;
+}
+inline bool Ship::IsHyperspacing() const { return hyperspaceCount != 0; }
+// Check if the ship is thrusting. If so, the engine sound should be played.
+inline bool Ship::IsThrusting() const { return isThrusting; }
+
+// Get the points from which engine flares should be drawn.
+inline const vector<Point> &Ship::EnginePoints() const { return enginePoints; }
+
+// Mark a ship as destroyed.
+inline void Ship::Destroy() { hull = -1.; }
+inline void Ship::SelfDestruct()
+{
+	Destroy();
+	explosionRate = 1024;
+}
+
+inline int Ship::Crew() const { return crew; }
+inline CargoHold &Ship::Cargo() { return cargo; }
+inline const CargoHold &Ship::Cargo() const { return cargo; }
+
+inline const Outfit &Ship::Attributes() const { return attributes; }
+inline const Outfit &Ship::BaseAttributes() const { return baseAttributes; }
+
+// Get outfit information.
+inline const map<const Outfit *, int> &Ship::Outfits() const { return outfits; }
+
+// Get the list of weapons.
+inline Armament &Ship::GetArmament() { return armament; }
+inline const vector<Hardpoint> &Ship::Weapons() const {
+	return armament.Get();
+}
+
+// Each ship can have a target system (to travel to), a target planet (to
+// land on) and a target ship (to move to, and attack if hostile).
+inline shared_ptr<Ship> Ship::GetTargetShip() const {
+	return targetShip.lock();
+}
+inline shared_ptr<Ship> Ship::GetShipToAssist() const {
+	return shipToAssist.lock();
+}
+inline const StellarObject *Ship::GetTargetPlanet() const { return targetPlanet; }
+inline const System *Ship::GetTargetSystem() const {
+	return (targetSystem == currentSystem) ? nullptr : targetSystem;
+}
+
+inline const Planet *Ship::GetDestination() const { return destination; }
+// Set this ship's targets.
+inline void Ship::SetTargetShip(const shared_ptr<Ship> &ship) { targetShip = ship; }
+inline void Ship::SetShipToAssist(const shared_ptr<Ship> &ship) { shipToAssist = ship; }
+inline void Ship::SetTargetPlanet(const StellarObject *object) { targetPlanet = object; }
+inline void Ship::SetTargetSystem(const System *system) { targetSystem = system; }
+inline void Ship::SetDestination(const Planet *planet) { destination = planet; }
 #endif
