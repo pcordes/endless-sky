@@ -17,7 +17,7 @@ if 'SCHROOT_CHROOT_NAME' in os.environ and 'steamrt' in os.environ['SCHROOT_CHRO
 opts = Variables()
 opts.Add(PathVariable("PREFIX", "Directory to install under", "/usr/local", PathVariable.PathIsDirCreate))
 opts.Add(PathVariable("DESTDIR", "Destination root directory", "", PathVariable.PathAccept))
-opts.Add(EnumVariable("mode", "Compilation mode", "release", allowed_values=("release", "debug", "profile")))
+opts.Add(EnumVariable("mode", "Compilation mode", "release", allowed_values=("release", "debug", "profile", "lto")))
 opts.Update(env)
 
 Help(opts.GenerateHelpText(env))
@@ -25,6 +25,9 @@ Help(opts.GenerateHelpText(env))
 flags = ["-std=c++11", "-Wall"]
 if env["mode"] != "debug":
 	flags += ["-O3"]
+if env["mode"] == "lto":
+	flags += ["-flto=3", "-ffast-math", "-g"]  # 3 parallel optimization threads at link time
+	env.Append(LINKFLAGS = [flags])
 if env["mode"] == "debug":
 	flags += ["-g"]
 if env["mode"] == "profile":
