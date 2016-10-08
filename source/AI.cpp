@@ -127,7 +127,7 @@ void AI::UpdateKeys(PlayerInfo &player, Command &clickCommands, bool isActive)
 				break;
 			}
 	
-	shared_ptr<Ship> target = flagship->GetTargetShip();
+	const shared_ptr<Ship> &target = flagship->GetTargetShip();
 	if(keyDown.Has(Command::FIGHT) && target && !target->IsYours())
 	{
 		sharedTarget = target;
@@ -337,11 +337,12 @@ void AI::Step(const list<shared_ptr<Ship>> &ships, const PlayerInfo &player)
 		}
 		
 		const Personality &personality = it->GetPersonality();
-		shared_ptr<Ship> parent = it->GetParent();
+		const shared_ptr<Ship> &parent = it->GetParent();
 		shared_ptr<const Ship> target = it->GetTargetShip();
 		
 		if(isPresent && personality.IsSwarming())
 		{
+			
 			parent.reset();
 			it->SetParent(parent);
 			if(!target || target->IsHyperspacing() || !target->IsTargetable()
@@ -1537,7 +1538,6 @@ Point AI::TargetAim(const Ship &ship)
 }
 
 
-
 // Fire whichever of the given ship's weapons can hit a hostile target.
 Command AI::AutoFire(const Ship &ship, const list<shared_ptr<Ship>> &ships, bool secondary) const
 {
@@ -1562,7 +1562,7 @@ Command AI::AutoFire(const Ship &ship, const list<shared_ptr<Ship>> &ships, bool
 	// not want to risk damaging that target. The only time a ship other than
 	// the player will target a friendly ship is if the player has asked a ship
 	// for assistance.
-	shared_ptr<Ship> currentTarget = ship.GetTargetShip();
+	shared_ptr<Ship> &currentTarget = ship.GetTargetShip();
 	const Government *gov = ship.GetGovernment();
 	bool isSharingTarget = ship.IsYours() && currentTarget == sharedTarget.lock();
 	bool currentIsEnemy = currentTarget
