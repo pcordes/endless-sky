@@ -146,7 +146,7 @@ public:
 	// Check if this ship is boarding another ship. If it is, it either plunders
 	// it or, if this is a player ship, returns the ship it is plundering so a
 	// plunder dialog can be displayed.
-	std::shared_ptr<Ship> Board(bool autoPlunder = true);
+	const std::shared_ptr<Ship> Board(bool autoPlunder = true);
 	// Scan the target, if able and commanded to. Return a ShipEvent bitmask
 	// giving the types of scan that succeeded.
 	int Scan() const;
@@ -295,8 +295,8 @@ public:
 	
 	// Each ship can have a target system (to travel to), a target planet (to
 	// land on) and a target ship (to move to, and attack if hostile).
-	std::shared_ptr<Ship> GetTargetShip() const;
-	std::shared_ptr<Ship> GetShipToAssist() const;
+	const std::shared_ptr<Ship> &GetTargetShip() const;
+	const std::shared_ptr<Ship> &GetShipToAssist() const;
 	const StellarObject *GetTargetPlanet() const;
 	const System *GetTargetSystem() const;
 	const Planet *GetDestination() const;
@@ -312,7 +312,7 @@ public:
 	// register itself as an escort of that ship, and unregister itself from any
 	// previous parent it had.
 	void SetParent(const std::shared_ptr<Ship> &ship);
-	std::shared_ptr<Ship> GetParent() const;
+	const std::shared_ptr<Ship> &GetParent() const;
 	const std::vector<std::weak_ptr<const Ship>> &GetEscorts() const;
 	
 	
@@ -430,6 +430,7 @@ private:
 	std::map<const Effect *, int> finalExplosions;
 	
 	// Target ships, planets, systems, etc.
+	static const std::shared_ptr<Ship> NOSHIP;  // Get...() functions can return a reference to this
 	std::weak_ptr<Ship> targetShip;
 	std::weak_ptr<Ship> shipToAssist;
 	const StellarObject *targetPlanet = nullptr;
@@ -481,12 +482,11 @@ inline const Planet *Ship::GetPlanet() const
 }
 
 inline bool Ship::IsCapturable() const { return isCapturable; }
-
-inline bool Ship::IsTargetable() const {
+inline bool Ship::IsTargetable() const
+{
 	return (zoom == 1. && !explosionRate && !forget && !isInvisible &&
 		cloak < 1. && hull >= 0. && hyperspaceCount < 70);
 }
-
 inline bool Ship::IsOverheated() const { return isOverheated; }
 inline bool Ship::IsDisabled() const
 {
@@ -496,10 +496,10 @@ inline bool Ship::IsDisabled() const
 }
 
 inline bool Ship::IsBoarding() const { return isBoarding; }
-inline bool Ship::IsLanding() const {
+inline bool Ship::IsLanding() const
+{
 	return landingPlanet;
 }
-
 
 inline bool Ship::CannotAct() const
 {
@@ -511,7 +511,8 @@ inline double Ship::Cloaking() const
 	return isInvisible ? 1. : cloak;
 }
 
-inline bool Ship::IsEnteringHyperspace() const {
+inline bool Ship::IsEnteringHyperspace() const
+{
 	return hyperspaceSystem;
 }
 inline bool Ship::IsHyperspacing() const { return hyperspaceCount != 0; }
@@ -541,20 +542,21 @@ inline const map<const Outfit *, int> &Ship::Outfits() const { return outfits; }
 
 // Get the list of weapons.
 inline Armament &Ship::GetArmament() { return armament; }
-inline const vector<Hardpoint> &Ship::Weapons() const {
-	return armament.Get();
-}
+inline const vector<Hardpoint> &Ship::Weapons() const { return armament.Get(); }
 
 // Each ship can have a target system (to travel to), a target planet (to
 // land on) and a target ship (to move to, and attack if hostile).
-inline shared_ptr<Ship> Ship::GetTargetShip() const {
+inline shared_ptr<Ship> Ship::GetTargetShip() const
+{
 	return targetShip.lock();
 }
-inline shared_ptr<Ship> Ship::GetShipToAssist() const {
+inline shared_ptr<Ship> Ship::GetShipToAssist() const
+{
 	return shipToAssist.lock();
 }
 inline const StellarObject *Ship::GetTargetPlanet() const { return targetPlanet; }
-inline const System *Ship::GetTargetSystem() const {
+inline const System *Ship::GetTargetSystem() const
+{
 	return (targetSystem == currentSystem) ? nullptr : targetSystem;
 }
 

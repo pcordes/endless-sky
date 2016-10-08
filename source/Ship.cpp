@@ -359,7 +359,7 @@ void Ship::FinishLoading()
 	// Do not recharge if this ship's starting state was saved.
 	if(!hull)
 	{
-		shared_ptr<const Ship> parent = GetParent();
+		const shared_ptr<const Ship> &parent = GetParent();
 		Recharge(!parent || currentSystem == parent->currentSystem);
 	}
 	else
@@ -452,7 +452,7 @@ void Ship::Save(DataWriter &out) const
 			out.Write("system", currentSystem->Name());
 		else
 		{
-			shared_ptr<const Ship> parent = GetParent();
+			const shared_ptr<const Ship> &parent = GetParent();
 			if(parent && parent->currentSystem)
 				out.Write("system", parent->currentSystem->Name());
 		}
@@ -983,7 +983,7 @@ bool Ship::Move(list<Effect> &effects, list<Flotsam> &flotsam)
 	// Boarding:
 	if(isBoarding && (commands.Has(Command::FORWARD | Command::BACK) || commands.Turn()))
 		isBoarding = false;
-	shared_ptr<const Ship> target = GetTargetShip();
+	const shared_ptr<const Ship> &target = GetTargetShip();
 	// If this is a fighter or drone and it is not assisting someone at the
 	// moment, its boarding target should be its parent ship.
 	if(CanBeCarried() && !(target && target == GetShipToAssist()))
@@ -1107,27 +1107,27 @@ void Ship::Launch(list<shared_ptr<Ship>> &ships)
 
 
 // Check if this ship is boarding another ship.
-shared_ptr<Ship> Ship::Board(bool autoPlunder)
+const shared_ptr<Ship> &Ship::Board(bool autoPlunder)
 {
 	if(!hasBoarded)
-		return shared_ptr<Ship>();
+		return NOSHIP;
 	hasBoarded = false;
 	
 	shared_ptr<Ship> victim = GetTargetShip();
 	if(CannotAct() || !victim || victim->IsDestroyed() || victim->GetSystem() != GetSystem())
-		return shared_ptr<Ship>();
+		return NOSHIP;
 	
 	// For a fighter, "board" means "return to ship."
 	if(CanBeCarried() && !victim->IsDisabled())
 	{
 		victim->Carry(shared_from_this());
-		return shared_ptr<Ship>();
+		return NOSHIP;
 	}
 	
 	// Board a ship of your own government to repair/refuel it.
 	if(!government->IsEnemy(victim->GetGovernment()))
 	{
-		SetShipToAssist(shared_ptr<Ship>());
+		SetShipToAssist(NOSHIP);
 		bool helped = victim->isDisabled;
 		victim->hull = max(victim->hull, victim->MinimumHull());
 		victim->isDisabled = false;
@@ -1142,10 +1142,10 @@ shared_ptr<Ship> Ship::Board(bool autoPlunder)
 			pilotError = 120;
 			victim->pilotError = 120;
 		}
-		return autoPlunder ? shared_ptr<Ship>() : victim;
+		return autoPlunder ? NOSHIP : victim;
 	}
 	if(!victim->IsDisabled())
-		return shared_ptr<Ship>();
+		return NOSHIP;
 	
 	// If the boarding ship is the player, they will choose what to plunder.
 	// Always take fuel if you can.
@@ -1155,14 +1155,14 @@ shared_ptr<Ship> Ship::Board(bool autoPlunder)
 		// Take any commodities that fit.
 		victim->cargo.TransferAll(&cargo);
 		// Stop targeting this ship.
-		SetTargetShip(shared_ptr<Ship>());
+		SetTargetShip(NOSHIP);
 		
 		// Pause for two seconds before moving on.
 		pilotError = 120;
 	}
 	
 	// Stop targeting this ship (so you will not board it again right away).
-	SetTargetShip(shared_ptr<Ship>());
+	SetTargetShip(NOSHIP);
 	return victim;
 }
 
@@ -1175,7 +1175,7 @@ int Ship::Scan() const
 	if(!commands.Has(Command::SCAN) || CannotAct())
 		return 0;
 	
-	shared_ptr<const Ship> target = GetTargetShip();
+	const shared_ptr<const Ship> &target = GetTargetShip();
 	if(!target)
 		return 0;
 	
@@ -1445,7 +1445,7 @@ void Ship::WasCaptured(const shared_ptr<Ship> &capturer)
 	
 	// Set the capturer as this ship's parent.
 	SetParent(capturer);
-	SetTargetShip(shared_ptr<Ship>());
+	SetTargetShip(NOSHIP);
 	SetTargetPlanet(nullptr);
 	SetTargetSystem(nullptr);
 	shipToAssist.reset();
