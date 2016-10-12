@@ -15,7 +15,7 @@ PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
 #ifdef __SSE2__
 #include <pmmintrin.h>       // We use some SSE3 intrinsics if it's also enabled.
-#define POD_POINT
+#define POD_POINT            // For auto-vectorization, non-POD may be better, passing by ref
 #endif
 
 // Class representing a 2D point with functions for a variety of vector operations.
@@ -118,8 +118,9 @@ private:
 // avoid using the x and y members at all, so we don't need a union
 // this lets Point be passed/returned by value in an XMM register (if we make it POD),
 // rather than in two separate XMM registers for scalar x and y
-inline double &Point::X()       { return reinterpret_cast<double &>(v); }
+
 // http://stackoverflow.com/questions/26554829/how-to-access-simd-vector-elements-when-overloading-array-access-operators
+inline double &Point::X()       { return reinterpret_cast<double &>(v); }
 inline double  Point::X() const { return v[0]; }
 inline double &Point::Y()       { return *(reinterpret_cast<double *>(&v) + 1); }  // v[1] doesn't work
 inline double  Point::Y() const { return v[1]; }
@@ -130,10 +131,6 @@ inline double &Point::Y()       { return y; }
 inline double  Point::Y() const { return y; }
 #endif
 
-
-
-#define INLINE_POINT
-#ifdef INLINE_POINT
 
 #ifndef __SSE2__
 #include <algorithm>
@@ -182,10 +179,9 @@ inline Point::operator bool() const
 	return !!*this;
 }
 
-
-
 inline bool Point::operator!() const
 {
+	// TODO: SIMD?
 	return (!X() & !Y());
 }
 
@@ -196,9 +192,6 @@ inline Point Point::operator+(const Point &point) const
 	Point result = *this;
 	return result += point;
 }
-
-
-
 inline Point &Point::operator+=(const Point &point)
 {
 #ifdef __SSE2__
@@ -217,9 +210,6 @@ inline Point Point::operator-(const Point &point) const
 	Point result = *this;
 	return result -= point;
 }
-
-
-
 inline Point &Point::operator-=(const Point &point)
 {
 #ifdef __SSE2__
@@ -231,9 +221,7 @@ inline Point &Point::operator-=(const Point &point)
 	return *this;
 }
 
-
-
-inline Point Point::operator-() const
+inline Point Point::operator-() const   // unary
 {
 	return Point() - *this;
 }
@@ -245,16 +233,10 @@ inline Point Point::operator*(double scalar) const
 	Point result = *this;
 	return result *= scalar;
 }
-
-
-
 inline Point operator*(double scalar, const Point &point)
 {
 	return point * scalar;
 }
-
-
-
 inline Point &Point::operator*=(double scalar)
 {
 #ifdef __SSE2__
@@ -273,9 +255,6 @@ inline Point Point::operator*(const Point &other) const
 	Point result = *this;
 	return result *= other;
 }
-
-
-
 inline Point &Point::operator*=(const Point &other)
 {
 #ifdef __SSE2__
@@ -294,9 +273,6 @@ inline Point Point::operator/(double scalar) const
 	Point result = *this;
 	return result /= scalar;
 }
-
-
-
 inline Point &Point::operator/=(double scalar)
 {
 #ifdef __SSE2__
@@ -372,6 +348,7 @@ inline double Point::Cross(const Point other) const
 	__m128d crossmul = otherSwapped * v;
 
 #if 0 && defined(__SSE3__) && !defined(__AVX__)
+	// never worth using
 	__m128d hsum = _mm_hsub_pd(crossmul, crossmul);
 	return _mm_cvtsd_f64(hsum);
 #else
@@ -379,6 +356,7 @@ inline double Point::Cross(const Point other) const
 	__m128 tmp = _mm_castpd_ps(v);  // avoid a movapd when AVX is unavailable
 	__m128d high = _mm_castps_pd(_mm_movehl_ps(tmp, _mm_castpd_ps(crossmul)));
 	return _mm_cvtsd_f64(crossmul) - _mm_cvtsd_f64(high);
+	// TODO: don't use tmp when AVX is available: it may hurt slightly, here and in Dot
 
 //	__m128d swapped = _mm_shuffle_pd(crossmul, crossmul, 0x01);
 //	crossmul -= swapped;
@@ -410,7 +388,6 @@ inline double Point::LengthSquared() const
 inline Point Point::Unit() const
 {
 #ifdef __SSE2__
-	// There's no double-precision equivalent of rsqrtps
 	__m128d square = v * v;
 #if defined(__SSE3__) && !defined(__AVX__)
 	__m128d hsum = _mm_hadd_pd(square, square);
@@ -418,6 +395,7 @@ inline Point Point::Unit() const
 	__m128d swapped = _mm_shuffle_pd(square, square, 0x01);
 	__m128d hsum     = square + swapped;
 #endif
+	// There's no double-precision equivalent of rsqrtps
 	__m128d length = _mm_sqrt_pd(hsum);
 	return Point(v / length);
 #else  // scalar
@@ -428,13 +406,10 @@ inline Point Point::Unit() const
 
 
 
-//inline
-double Point::Distance(const Point &point) const
+inline double Point::Distance(const Point &point) const
 {
 	return (*this - point).Length();
 }
-
-
 
 inline double Point::DistanceSquared(const Point &point) const
 {
@@ -488,9 +463,6 @@ inline Point::Point(const __m128d &v)
 {
 }
 #endif
-
-#endif // INLINE_POINT
-
 
 #endif  // POINT_H_
 
