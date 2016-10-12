@@ -115,30 +115,6 @@ void Government::Load(const DataNode &node)
 
 
 
-// Get the name of this government.
-const string &Government::GetName() const
-{
-	return name;
-}
-
-
-
-// Get the color swizzle to use for ships of this government.
-int Government::GetSwizzle() const
-{
-	return swizzle;
-}
-
-
-
-// Get the color to use for displaying this government on the map.
-const Color &Government::GetColor() const
-{
-	return color;
-}
-
-
-
 // Get the government's initial disposition toward other governments or
 // toward the player.
 double Government::AttitudeToward(const Government *other) const
@@ -156,13 +132,6 @@ double Government::AttitudeToward(const Government *other) const
 
 
 
-double Government::InitialPlayerReputation() const
-{
-	return initialPlayerReputation;
-}
-
-
-
 // Get the amount that your reputation changes for the given offense.
 double Government::PenaltyFor(int eventType) const
 {
@@ -175,26 +144,6 @@ double Government::PenaltyFor(int eventType) const
 
 
 
-// In order to successfully bribe this government you must pay them this
-// fraction of your fleet's value. (Zero means they cannot be bribed.)
-double Government::GetBribeFraction() const
-{
-	return bribe;
-}
-
-
-
-double Government::GetFineFraction() const
-{
-	return fine;
-}
-
-
-
-const Conversation *Government::DeathSentence() const
-{
-	return deathSentence;
-}
 
 
 
@@ -203,96 +152,4 @@ string Government::GetHail() const
 {
 	const Phrase *phrase = IsEnemy() ? hostileHail : friendlyHail;
 	return phrase ? phrase->Get() : "";
-}
-
-
-
-// Find out if this government speaks a different language.
-const string &Government::Language() const
-{
-	return language;
-}
-
-
-
-// Pirate raids in this government's systems use this fleet definition. If
-// it is null, there are no pirate raids.
-const Fleet *Government::RaidFleet() const
-{
-	return raidFleet;
-}
-
-
-	
-// Check if, according to the politics stored by GameData, this government is
-// an enemy of the given government right now.
-bool Government::IsEnemy(const Government *other) const
-{
-	return GameData::GetPolitics().IsEnemy(this, other);
-}
-
-
-
-// Check if this government is an enemy of the player.
-bool Government::IsEnemy() const
-{
-	return GameData::GetPolitics().IsEnemy(this, GameData::PlayerGovernment());
-}
-
-
-
-// Check if this is the player government.
-bool Government::IsPlayer() const
-{
-	return (this == GameData::PlayerGovernment());
-}
-
-
-
-// Commit the given "offense" against this government (which may not
-// actually consider it to be an offense). This may result in temporary
-// hostilities (if the even type is PROVOKE), or a permanent change to your
-// reputation.
-void Government::Offend(int eventType, int count) const
-{
-	return GameData::GetPolitics().Offend(this, eventType, count);
-}
-
-
-
-// Bribe this government to be friendly to you for one day.
-void Government::Bribe() const
-{
-	GameData::GetPolitics().Bribe(this);
-}
-
-
-
-// Check to see if the player has done anything they should be fined for.
-// Each government can only fine you once per day.
-string Government::Fine(PlayerInfo &player, int scan, const Ship *target, double security) const
-{
-	return GameData::GetPolitics().Fine(player, this, scan, target, security);
-}
-
-
-
-// Get or set the player's reputation with this government.
-double Government::Reputation() const
-{
-	return GameData::GetPolitics().Reputation(this);
-}
-
-
-
-void Government::AddReputation(double value) const
-{
-	GameData::GetPolitics().AddReputation(this, value);
-}
-
-
-
-void Government::SetReputation(double value) const
-{
-	GameData::GetPolitics().SetReputation(this, value);
 }
