@@ -711,7 +711,7 @@ void AI::MoveIndependent(Ship &ship, Command &command) const
 	if(target && !ship.IsYours() && !ship.GetPersonality().IsUnconstrained())
 	{
 		Point extrapolated = target->Position() + 120. * (target->Velocity() - ship.Velocity());
-		if(extrapolated.Length() >= MAX_DISTANCE_FROM_CENTER)
+		if(extrapolated.OutOfRange(MAX_DISTANCE_FROM_CENTER)) // was >=
 		{
 			MoveTo(ship, command, Point(), 40., .8);
 			if(ship.Velocity().Dot(ship.Position()) > 0.)
@@ -994,7 +994,7 @@ bool AI::MoveTo(Ship &ship, Command &command, const Point &target, double radius
 	
 	double speed = velocity.Length();
 	
-	bool isClose = (distance.Length() < radius);
+	bool isClose = distance.InRange(radius);  // was <
 	if(isClose && speed < slow)
 		return true;
 	
@@ -1018,6 +1018,7 @@ bool AI::Stop(Ship &ship, Command &command, double maxSpeed)
 	const Point &velocity = ship.Velocity();
 	const Angle &angle = ship.Facing();
 	
+	double velocityDotAngle = velocity.Unit().Dot(angle.Unit());
 	double speed = velocity.Length();
 	
 	// If asked for a complete stop, the ship needs to be going much slower.
@@ -1039,7 +1040,7 @@ bool AI::Stop(Ship &ship, Command &command, double maxSpeed)
 	if(ship.Attributes().Get("reverse thrust"))
 	{
 		// Figure out your stopping time using your main engine:
-		double degreesToTurn = TO_DEG * acos(min(1., max(-1., -velocity.Unit().Dot(angle.Unit()))));
+		double degreesToTurn = TO_DEG * acos(min(1., max(-1., -velocityDotAngle)));
 		double forwardTime = degreesToTurn / ship.TurnRate();
 		forwardTime += stopTime;
 		
@@ -1051,14 +1052,14 @@ bool AI::Stop(Ship &ship, Command &command, double maxSpeed)
 		if(reverseTime < forwardTime)
 		{
 			command.SetTurn(TurnToward(ship, velocity));
-			if(velocity.Unit().Dot(angle.Unit()) > limit)
+			if(velocityDotAngle > limit)
 				command |= Command::BACK;
 			return false;
 		}
 	}
 	
 	command.SetTurn(TurnBackward(ship));
-	if(velocity.Unit().Dot(angle.Unit()) < -limit)
+	if(velocityDotAngle < -limit)
 		command |= Command::FORWARD;
 	
 	return false;
