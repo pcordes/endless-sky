@@ -1583,16 +1583,27 @@ Command AI::AutoFire(const Ship &ship, const list<shared_ptr<Ship>> &ships, bool
 	maxRange *= 1.5;
 	
 	// Find all enemy ships within range of at least one weapon.
-	vector<shared_ptr<const Ship>> enemies;
+	//vector<shared_ptr<const Ship>> enemies;
+	// The list can't be modified while we're running, so references to those shared_ptrs are fine
+	vector<reference_wrapper<const shared_ptr<Ship>>> enemies;
+	//vector<const Ship*> enemies;
+
 	if(currentTarget)
-		enemies.push_back(currentTarget);
-	for(auto target : ships)
-		if(target->IsTargetable() && gov->IsEnemy(target->GetGovernment())
-				&& !(target->IsHyperspacing() && target->Velocity().Length() > 10.)
-				&& target->GetSystem() == ship.GetSystem()
-				&& target->Position().Distance(ship.Position()) < maxRange
-				&& target != currentTarget)
-			enemies.push_back(target);
+		enemies.emplace_back(currentTarget);
+	for(auto &&target : ships)                          // in order of filtering power and cheapness
+//	for(auto it = ships.begin(); it != ships.end(); ++it)
+//	{
+//		const shared_ptr<Ship> &target = *it;
+		if(target->GetSystem() == ship.GetSystem()        // IsTargetable() returns true in the first frame after a ship has left the player's system, since Ship::forget is incremented based on the old value (IsTargetable() checks forget instead of isInSystem
+				&& target->Position().InRange(ship.Position(), maxRange)
+				&& target != currentTarget
+				&& target->IsTargetable()
+				&& gov->IsEnemy(target->GetGovernment())
+				&& !(target->IsHyperspacing() && target->Velocity().OutOfRange(10.))
+			)
+			enemies.emplace_back(target);
+//			enemies.emplace_back(*it);
+//	}
 	
 	for(const Hardpoint &weapon : ship.Weapons())
 	{
@@ -1666,8 +1677,9 @@ Command AI::AutoFire(const Ship &ship, const list<shared_ptr<Ship>> &ships, bool
 		if(weapon.IsHoming())
 			continue;
 		
-		for(const shared_ptr<const Ship> &target : enemies)
+		for(auto targetref : enemies)
 		{
+			const shared_ptr<const Ship> &target = targetref.get();
 			// Don't shoot ships we want to plunder.
 			bool hasBoarded = Has(ship, target, ShipEvent::BOARD);
 			if(target->IsDisabled() && spareDisabled && !hasBoarded)
