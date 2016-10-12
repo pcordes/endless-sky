@@ -441,6 +441,7 @@ private:
 	std::weak_ptr<Ship> parent;
 };
 
+using namespace std;
 
 inline const string &Ship::Name() const { return name; }
 inline const string &Ship::ModelName() const { return modelName; }
