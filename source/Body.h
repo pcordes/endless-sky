@@ -15,6 +15,7 @@ PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
 #include <cstdint>
 #include <string>
+#include <algorithm>
 
 #include "Angle.h"
 #include "Point.h"
@@ -129,5 +130,114 @@ private:
 };
 
 
+
+// Constructor, based on a Sprite.
+inline Body::Body(const Sprite *sprite, Point position, Point velocity, Angle facing, double zoom)
+	: position(position), velocity(velocity), angle(facing), zoom(zoom), sprite(sprite), randomize(true)
+{
+}
+
+// Constructor, based on the animation from another Body object.
+inline Body::Body(const Body &sprite, Point position, Point velocity, Angle facing, double zoom)
+{
+	*this = sprite;
+	this->position = position;
+	this->velocity = velocity;
+	this->angle = facing;
+	this->zoom = zoom;
+}
+
+#include "Sprite.h"
+
+// Check that this Body has a sprite and that the sprite has at least one frame.
+inline bool Body::HasSprite() const
+{
+	return (sprite && sprite->Frames());
+}
+
+// Access the underlying Sprite object.
+inline const Sprite *Body::GetSprite() const { return sprite; }
+
+// Get the width of this object, in world coordinates (i.e. taking zoom into account).
+inline double Body::Width() const
+{
+	return sprite ? (.5 * zoom) * sprite->Width() : 0.;
+}
+
+// Get the height of this object, in world coordinates (i.e. taking zoom into account).
+inline double Body::Height() const
+{
+	return sprite ? (.5 * zoom) * sprite->Height() : 0.;
+}
+
+// Get the farthest a part of this sprite can be from its center.
+inline double Body::Radius() const
+{
+	return .5 * Point(Width(), Height()).Length();
+}
+
+
+// Which color swizzle should be applied to the sprite?
+inline int Body::GetSwizzle() const { return swizzle; }
+
+// Get the sprite for the given time step. If no time step is given, this will
+// return the frame from the most recently given step.
+inline Body::Frame Body::GetFrame(int step) const
+{
+	SetStep(step);
+	return frame;
+}
+
+// Get the mask for the given time step. If no time step is given, this will
+// return the mask from the most recently given step.
+inline const Mask &Body::GetMask(int step) const
+{
+	static const Mask empty;
+
+	SetStep(step);
+	return (mask ? *mask : empty);
+}
+
+// Position, in world coordinates (zero is the system center).
+inline const Point &Body::Position() const { return position; }
+// Velocity, in pixels per second.
+inline const Point &Body::Velocity() const { return velocity; }
+// Direction this Body is facing in.
+inline const Angle &Body::Facing() const { return angle; }
+
+// Unit vector in the direction this body is facing. This represents the scale
+// and transform that should be applied to the sprite before drawing it.
+inline Point Body::Unit() const
+{
+	return angle.Unit() * (.5 * Zoom());
+}
+
+// Zoom factor. THis controls how big the sprite should be drawn.
+inline double Body::Zoom() const {
+	return std::max(zoom, 0.);
+}
+
+// Store the government here too, so that collision detection that is based
+// on the Body class can figure out which objects will collide.
+inline const Government *Body::GetGovernment() const { return government; }
+
+// Set the sprite.
+inline void Body::SetSprite(const Sprite *sprite) {  this->sprite = sprite;  }
+// Set the color swizzle.
+inline void Body::SetSwizzle(int swizzle) { this->swizzle = swizzle; }
+
+
+
+// Set the frame rate of the sprite. This is used for objects that just specify
+// a sprite instead of a full animation data structure.
+inline void Body::SetFrameRate(double framesPerSecond) {
+	frameRate = framesPerSecond * (1. / 60.);
+}
+
+// Add the given amount to the frame rate.
+inline void Body::AddFrameRate(double framesPerSecond)
+{
+	frameRate += framesPerSecond * (1. / 60.);
+}
 
 #endif
