@@ -53,17 +53,11 @@ public:
 	// Return a point rotated by this angle around (0, 0).
 	Point Rotate(const Point &point) const;
 	
-	Point testUnit_byval() const;
-	const Point &testUnit_byref() const;
 private:
 	explicit Angle(int32_t angle);
 	
 	
 private:
-	static const Point* unitCache;
-	static const Point unitCache_flat[];
-	static const float testarray[];
-
 	// The angle is stored as an integer value between 0 and 2^16 - 1. This is
 	// so that any angle can be mapped to a unit vector (a very common operation)
 	// with just a single array lookup. It also means that "wrapping" angles
@@ -76,11 +70,11 @@ private:
 	static constexpr double STEP_TO_RAD = PI / (STEPS / 2);
 
 	class UnitVectorCache {
-	public:
-		UnitVectorCache();
+	public:  // this is still part of the private implementation of Angle
+		UnitVectorCache();          // construct the sincos lookup table
 		alignas(64) Point lut[STEPS];
 	};
-	static const UnitVectorCache unitVectorCache;
+        static const UnitVectorCache unitVectorCache;
 };
 
 // Default constructor: generates an angle pointing straight up.
@@ -134,9 +128,18 @@ inline Angle Angle::operator-() const
 	return Angle((-angle) & MASK);
 }
 
+
+// we could cut the table size in half with float
+// and possibly in half again by calculating cos() as sqrt(1 - sin^2), and setting the sign based on the angle quadrant
+inline const Point &Angle::Unit() const
+{
+	return unitVectorCache.lut[angle];
+}
+
+
 // Return a point rotated by this angle around (0, 0).
 // called frequently, and not as complicated as it looks
-Point Angle::Rotate(const Point &point) const
+inline Point Angle::Rotate(const Point &point) const
 {
 	// If using the normal mathematical coordinate system, this would be easier.
 	// Since we're not, the math is a tiny bit less elegant:
@@ -147,7 +150,7 @@ Point Angle::Rotate(const Point &point) const
 
 
 // Constructor using Angle's internal representation.
-Angle::Angle(int32_t angle)
+inline Angle::Angle(int32_t angle)
 	: angle(angle)
 {
 }

@@ -35,30 +35,17 @@ namespace {
 
 
 
+Point rotate(Angle ang, const Point &point) {
+#warning remove this dummy function
+	return ang.Rotate(point);
+}
+
+
 // Get a random angle.
 Angle Angle::Random()
 {
 	return Angle(static_cast<int32_t>(Random::Int(STEPS)));
 }
-
-
-// same behaviour if this is a nested class & member in Angle
-class foo {
-public:
-	foo();
-	alignas(64) float lut[STEPS];
-};
-static const foo test_primitive;
-
-//Point Angle::unitVectorCache.lut[STEPS];  // only the instance is static
-foo::foo() {
-	// no wasted memset
-	for(int i = 0; i < STEPS; ++i) {
-		float radians = i * STEP_TO_RAD;
-		lut[i] = sinf(radians);
-	}
-}
-
 
 
 // Get a random angle between 0 and the given number of degrees.
@@ -71,23 +58,11 @@ Angle Angle::Random(double range)
 }
 
 
-/*
-const float Angle::testarray[14] = { 1, 2, 3, 4 };
-const Point Angle::unitCache_flat[2] = { {1,2}, {2, 3} };
-
-Point Angle::testUnit_byval() const
-{
-	return unitVectorCache.lut[angle];
-}
-const Point &Angle::testUnit_byref() const
-{
-	return unitVectorCache.lut[angle];
-}
-*/
-
+const Angle::UnitVectorCache Angle::unitVectorCache;
 Angle::UnitVectorCache::UnitVectorCache()
 {
 	// lut[] is zeroed before this loop runs, by the Point() default constructor :(
+	// possible workaround: a special constructor for Point that skips initialization.
 	for(int i = 0; i < STEPS; ++i)
 	{
 		double radians = i * STEP_TO_RAD;
@@ -95,123 +70,9 @@ Angle::UnitVectorCache::UnitVectorCache()
 		// positive Y is down rather than up. Angles are clock angles, i.e.
 		// 0 is 12:00 and angles increase in the clockwise direction. So, an
 		// angle of 0 degrees is pointing in the direction (0, -1).
-		lut[i] = { sin(radians), -cos(radians) };
-//		cache[i] = Point(sin(radians), -cos(radians));
+		lut[i] = Point(sin(radians), -cos(radians));
 	}
 }
-
-
-/*
-Point Angle::UnitVectorCache::lut[STEPS];  // static member of the nested class
-
-Angle::UnitVectorCache::UnitVectorCache()
-{
-	for(int i = 0; i < STEPS; ++i)
-	{
-		double radians = i * STEP_TO_RAD;
-		// The graphics use the usual screen coordinate system, meaning that
-		// positive Y is down rather than up. Angles are clock angles, i.e.
-		// 0 is 12:00 and angles increase in the clockwise direction. So, an
-		// angle of 0 degrees is pointing in the direction (0, -1).
-		lut[i] = { sin(radians), -cos(radians) };
-//		cache[i] = Point(sin(radians), -cos(radians));
-	}
-
-
-}
-
-Point Angle::testUnit() const
-{
-	return UnitVectorCache::lut[angle];
-}
-*/
-
-
-/*
-// Get a unit vector in the direction of this angle.
-Point Angle::Unit() const
-{
-	// The very first time this is called, create a lookup table of unit vectors.
-	static vector<Point> cache;
-	if(cache.empty())
-	{
-		cache.reserve(STEPS);
-		for(int i = 0; i < STEPS; ++i)
-		{
-			double radians = i * STEP_TO_RAD;
-			// The graphics use the usual screen coordinate system, meaning that
-			// positive Y is down rather than up. Angles are clock angles, i.e.
-			// 0 is 12:00 and angles increase in the clockwise direction. So, an
-			// angle of 0 degrees is pointing in the direction (0, -1).
-			cache.emplace_back(sin(radians), -cos(radians));
-		}
-	}
-	return cache[angle];
-}
-*/
-
-/*
-static Point unitVectors[STEPS];
-static constexpr Point* BuildUnitCache()
-{
-	for(int i = 0; i < STEPS; ++i)
-	{
-		double radians = i * STEP_TO_RAD;
-		// The graphics use the usual screen coordinate system, meaning that
-		// positive Y is down rather than up. Angles are clock angles, i.e.
-		// 0 is 12:00 and angles increase in the clockwise direction. So, an
-		// angle of 0 degrees is pointing in the direction (0, -1).
-//		unitVectors[i] = { sin(radians), -cos(radians) };
-//		unitVectors[i] = Point(sin(radians), -cos(radians));
-		unitVectors[i].X() = sin(radians);
-		unitVectors[i].Y() =-cos(radians);
-	}
-	return unitVectors;
-}
-static const Point* Angle::unitCache = BuildUnitCache();
-*/
-
-alignas(64) static struct {
-    alignas(16) double x;
-    double y;
-} unitVectors[STEPS];
-
-static constexpr const Point* BuildUnitCache()
-{
-	for(int i = 0; i < STEPS; ++i)
-	{
-		double radians = i * STEP_TO_RAD;
-		// The graphics use the usual screen coordinate system, meaning that
-		// positive Y is down rather than up. Angles are clock angles, i.e.
-		// 0 is 12:00 and angles increase in the clockwise direction. So, an
-		// angle of 0 degrees is pointing in the direction (0, -1).
-//		unitVectors[i] = { sin(radians), -cos(radians) };
-//		unitVectors[i] = Point(sin(radians), -cos(radians));
-		unitVectors[i].x =  sin(radians);
-		unitVectors[i].y = -cos(radians);
-	}
-//	return unitVectors;
-	return (const Point*) unitVectors;
-}
-const Point* Angle::unitCache = BuildUnitCache();
-
-const Point &Angle::Unit() const
-{
-//	return *reinterpret_cast<Point*>(&unitVectors[angle]);  // violates strict aliasing
-	//return Point(unitVectors[angle].x, unitVectors[angle].y);
-	return unitCache[angle];
-}
-
-
-static vector<Point> local_cache;
-Point Angle_LUT(int32_t idx) {
-	return local_cache[idx];
-}
-
-const Point & Angle_LUT_byref(int32_t idx) {
-	return local_cache[idx];
-}
-
 
 // Convert an angle back to a value in degrees.
 double Angle::Degrees() const
