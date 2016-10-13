@@ -54,7 +54,31 @@ env["ENV"].update(x for x in os.environ.items() if x[0].startswith("CCC_"))
 
 VariantDir("build/" + env["mode"], "source", duplicate = 0)
 
+bench_source = [ "/Mask.cpp", "/ImageBuffer.cpp", "/Angle.cpp", "/Random.cpp", "/File.cpp", "/Files.cpp" ]
+#+ Glob("/File*.cpp")
+
+#mc_microbench = env.Program("mask-contains", Glob("build/" + env["mode"] + bench_source))
+#mc_microbench = env.Program("mask-contains", [ Glob("build/" + env["mode"] + "/Mask.cpp"), Glob("build/" + env["mode"] + "/Angle.cpp") ] )
+#mc_microbench = env.Program("mask-contains", [ Glob("build/" + env["mode"]) ] + bench_source )
+
+
+bench_source = ["build/" + env["mode"] + x for x in bench_source]
+
+new_filenames = []
+#for x in bench_source:
+#    tmp = "build/" + env["mode"] + x
+#    new_filenames.append(tmp)
+#bench_source = new_filenames
+
+#import os.path
+#bench_source = [os.path.join("build/" + env["mode"], x) for x in bench_source]
+
+env.Append(CPPFLAGS = ["-DBENCHMARK_MASK"] )
+
+mc_microbench = env.Program("mask-contains", bench_source )
 sky = env.Program("endless-sky", Glob("build/" + env["mode"] + "/*.cpp"))
+
+BUILD_TARGETS.append("mask-contains")
 
 
 # Install the binary:
