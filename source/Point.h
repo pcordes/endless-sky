@@ -87,9 +87,12 @@ public:
 	double &access(int idx);
 	
 private:
+
 #ifdef __SSE2__
+public:
 	// Private constructor, using a vector.
 	Point(const __m128d &v);
+	operator __m128d() const { return v; }
 
 private:
 #if 0
