@@ -366,15 +366,57 @@ bool Mask::Contains(Point point) const
 	Point prev = outline.back();
 	for(const Point &next : outline)
 	{
-		if(prev.X() != next.X())
-			if((prev.X() <= point.X()) == (point.X() < next.X()))
-			{
-				double y = prev.Y() + (next.Y() - prev.Y()) *
-					(point.X() - prev.X()) / (next.X() - prev.X());
-				intersections += (y >= point.Y());
-			}
+		if((prev.X() <= point.X()) == (point.X() < next.X()))
+		{
+			double y = prev.Y() + (next.Y() - prev.Y()) *
+				(point.X() - prev.X()) / (next.X() - prev.X());
+			intersections += (y >= point.Y());
+		}
 		prev = next;
 	}
 	// If the number of intersections is odd, the point is within the mask.
 	return (intersections & 1);
 }
+
+
+#ifdef BENCHMARK_MASK
+#include <stdio.h>
+#include "Random.h"
+
+int main(int argc, char*argv[])
+{
+	ImageBuffer *kes_img = ImageBuffer::Read("images/ship/kestrel.png");
+	if (!kes_img) {
+		perror("reading kestrel image");
+		return 1;
+	}
+	Mask kestrelmsk;
+	kestrelmsk.Create(kes_img);
+
+	Mask msk = kestrelmsk;
+	while (--argc) {
+		ImageBuffer *img = ImageBuffer::Read(argv[argc]);
+		if (!img) {
+			perror("reading image from ship");
+			return 1;
+		}
+		msk.Create(img);
+		delete img;
+		printf("%s : %lu\n", argv[argc], msk.OutlineCount());
+	}
+
+	vector<Point> points;
+	double mskradius = msk.GetRadius();
+	for (int i=0 ; i<8 ; ++i) {
+//		points.emplace_back(Random::Real() * 2*mskradius, Random::Real() * 2*mskradius);
+		points.emplace_back(i * 0.125 * mskradius,  i * 0.125 * mskradius);
+	}
+	int total = 0;
+	for (int i=0; i<1000000; i++) {
+		for (Point &p : points)
+			total += msk.Contains(p);
+	}
+	printf("total contain hits = %d\n", total);
+}
+
+#endif
