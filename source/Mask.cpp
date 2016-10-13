@@ -364,19 +364,91 @@ bool Mask::Contains(Point point) const
 	// intersects only if its x coordinates span the point's coordinates.
 	int intersections = 0;
 	Point prev = outline.back();
+//	Point dp = point - prev;      // diff to previous
+//	bool dpXSign = signbit(dp.X());
+
+	//asm ("xor %k0,%k0" : "+r"(dpXSign)); // gcc is dumb and causes partial-reg stalls on Core2
+	unsigned dpXSign = (point.X() < prev.X());
+
 	for(const Point &next : outline)
 	{
+#if 1
+		//Point dn  = point - next;
+		//bool dnXSign = signbit(dn.X());
+		unsigned dnXSign = (point.X() < next.X());
+
+//		if(dpXSign != dnXSign) {
+		if((prev.X() <= point.X()) == (point.X() < next.X()))  // 1245ms kestrel with gcc5.2
+		{
+			Point seg = next - prev;
+			Point dp = point - prev;
+#ifdef __SSE2__
+			__m128d dpSwap = _mm_shuffle_pd(dp, dp, 1);
+			__m128d cross  = _mm_mul_pd(dpSwap, seg);   // [ dpY*segX | dpX*segY ]
+			__m128d dpXsegY = _mm_unpackhi_pd(cross, cross); // TODO: MOVHLPS?
+			__m128d cmp    = _mm_cmple_sd(cross, dpXsegY);
+			cmp = _mm_xor_pd(seg, cmp);
+			unsigned yGEpoint = _mm_movemask_pd(cmp) & 1;  // just the low bit
+#else
+			// Avoid a division by multiplying both sides of the inequality, and bring both seg.X terms to one side
+
+			bool yGEpoint = seg.Y() * dp.X() >= dp.Y() * seg.X();
+			// This inverts the inequality if seg.X() is negative
+			yGEpoint ^= signbit(seg.X());
+#endif
+
+			intersections += yGEpoint;
+		}
+
+		prev = next;
+//		dp = dn;
+		dpXSign = dnXSign;
+#else
 		if((prev.X() <= point.X()) == (point.X() < next.X()))
 		{
+			// This check excludes the next.X() == prev.X() case,
+			// so divide by zero is impossible (except with flush-to-zero if the difference underflows)
+			// Can nX - pX == 0 while nX and pX are one or two ulp apart?  so pX == point.X but point.X < nX
+			// Denormals are Zero on input affects compares, but FTZ output only affects sub
+			// Bruce Dawson says this can be a problem without denormals:
+			// https://randomascii.wordpress.com/2012/05/20/thats-not-normalthe-performance-of-odd-floats/
+			// of course if we need to check, checking nX-pX != 0. is the way to go
 			double y = prev.Y() + (next.Y() - prev.Y()) *
 				(point.X() - prev.X()) / (next.X() - prev.X());
 			intersections += (y >= point.Y());
 		}
 		prev = next;
+#endif
 	}
 	// If the number of intersections is odd, the point is within the mask.
 	return (intersections & 1);
 }
+/*
+  seg = next - prev;
+  dn = V - next;
+
+  dp = dn_last_iter;		// V - prev
+  prev = next_last_iter;
+
+  signbit(dp) == 0;	  // prev.X <= point.X;     // 0 <= point.X - prev.X
+  signbit(dn) == 1;	  // point.X < next.X       // point.X - next.X < 0
+
+  // (p.X <= V.X) == (V.X < c.X)
+  signbit(dp) ^ signbit(dn) == 1;
+
+
+  y = prev.Y + seg.Y * dp.X / seg.X
+  intersections += prev.Y + seg.Y * dp.X / seg.X >= V.Y
+
+  if(signbit(dp) ^ signbit(dn) == 1)
+    intersections += (prev.Y * seg.X + seg.Y * dp.X >= V.Y * seg.X) ^ signbit(seg.X)
+
+  if(signbit(dp) != signbit(dn)) {
+    //intersections += (seg.Y * dp.X >= V.Y * seg.X - prev.Y * seg.X) ^ signbit(seg.X)
+    //intersections += (seg.Y * dp.X >= (V.Y - prev.Y) * seg.X) ^ signbit(seg.X)
+      intersections += (seg.Y * dp.X >= dp.Y * seg.X) ^ signbit(seg.X)
+  }
+ */
 
 
 #ifdef BENCHMARK_MASK
