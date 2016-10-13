@@ -24,7 +24,7 @@ namespace {
 	// Trace out a pixmap.
 	void Trace(ImageBuffer *image, vector<Point> *raw)
 	{
-		uint32_t on = 0xFF000000;
+		uint32_t on = 0xFF000000;  // alpha channel
 		const uint32_t *begin = image->Pixels();
 		
 		// Convert the pitch to uint32_ts instead of bytes.
@@ -36,15 +36,15 @@ namespace {
 		// This is where we will store the point:
 		Point point;
 		
-		for(int y = 0; y < image->Height(); ++y)
-			for(int x = 0; x < image->Width(); ++x)
+		for(int y = 0, height=image->Height(); y < height; ++y)
+			for(int x = 0, width=image->Width(); x < width; ++x)
 			{
 				// If this pixel is occupied, bail out of both loops.
 				if(*it & on)
 				{
 					point.Set(x, y);
 					// Break out of both loops.
-					y = image->Height();
+					y = height;
 					break;
 				}
 				++it;
