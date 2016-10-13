@@ -327,11 +327,13 @@ inline double Point::Dot(const Point &point) const
 	return prod[0] + prod[1];
 #else
 	// MOVHLPS into a dead register is the only way to hsum without an extra
-	// MOVAPD, even when AVX is unavailable.
+	// MOVAPD, when AVX is unavailable.
 	// using a copy of v as our dead register gives good results sometimes.
 	__m128 tmp = _mm_castpd_ps(v);
 	__m128d high = _mm_castps_pd(_mm_movehl_ps(tmp, _mm_castpd_ps(prod)));
 	return _mm_cvtsd_f64(prod) + _mm_cvtsd_f64(high);
+	// TODO: something that leaves the sum in both halves?
+	// so smart compilers can avoid re-broadcasting, like Unit() does
 #endif
 
 #else
