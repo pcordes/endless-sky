@@ -52,6 +52,17 @@ private:
 	uint32_t *pixels;
 };
 
-
+inline int ImageBuffer::Width() const { return width; }
+inline int ImageBuffer::Height() const { return height; }
+inline const uint32_t *ImageBuffer::Pixels() const { return pixels; }
+inline uint32_t *ImageBuffer::Pixels() { return pixels; }
+inline const uint32_t *ImageBuffer::Begin(int y) const
+{
+	return pixels + y * Width();
+}
+inline uint32_t *ImageBuffer::Begin(int y)
+{
+	return pixels + y * Width();
+}
 
 #endif

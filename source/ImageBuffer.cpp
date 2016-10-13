@@ -51,48 +51,6 @@ ImageBuffer::~ImageBuffer()
 }
 
 
-
-int ImageBuffer::Width() const
-{
-	return width;
-}
-
-
-
-int ImageBuffer::Height() const
-{
-	return height;
-}
-
-
-const uint32_t *ImageBuffer::Pixels() const
-{
-	return pixels;
-}
-
-
-
-uint32_t *ImageBuffer::Pixels()
-{
-	return pixels;
-}
-
-
-
-const uint32_t *ImageBuffer::Begin(int y) const
-{
-	return pixels + y * Width();
-}
-
-
-
-uint32_t *ImageBuffer::Begin(int y)
-{
-	return pixels + y * Width();
-}
-
-
-
 void ImageBuffer::ShrinkToHalfSize()
 {
 	ImageBuffer result(width / 2, height / 2);
