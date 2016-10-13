@@ -75,7 +75,17 @@ namespace {
 				next = point + step[d];
 				// Use padded comparisons in case errors somehow accumulate and
 				// the doubles are no longer canceling out to 0.
-				if((next.X() >= -.5) & (next.Y() >= -.5) & (next.X() < maxX) & (next.Y() < maxY))
+#ifdef __SSE2__
+				__m128d ge_minus_half = _mm_cmpge_pd(next, _mm_set1_pd(-0.5));
+				__m128d lt_max = _mm_cmplt_pd(next, _mm_setr_pd(maxX, maxY));
+				__m128d anded = _mm_and_pd(ge_minus_half, lt_max);
+				bool inbounds = _mm_movemask_pd(anded) == 0b11;  // all 4 conditions true
+#else
+				unsigned ge_mh = (next.X() >= -.5) & (next.Y() >= -.5);
+				unsigned lt_mh = (next.X() < maxX) & (next.Y() < maxY);
+				bool inbounds = ge_mh & lt_mh;
+#endif
+				if(inbounds)
 					if(it[off[d]] & on)
 						break;
 				
