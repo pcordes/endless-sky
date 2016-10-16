@@ -314,9 +314,9 @@ double Mask::Range(Point point, Angle facing) const
 		return 0.;
 	
 	for(const Point &p : outline)
-		range = min(range, p.Distance(point));
+		range = min(range, p.DistanceSquared(point));
 	
-	return range;
+	return sqrt(range);
 }
 
 
