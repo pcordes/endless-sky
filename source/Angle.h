@@ -144,8 +144,27 @@ inline Point Angle::Rotate(const Point &point) const
 	// If using the normal mathematical coordinate system, this would be easier.
 	// Since we're not, the math is a tiny bit less elegant:
 	Point unit = Unit();
+#ifdef __SSE2__
+							        // [low(0) | high(1) ] vector halves(shuffle index)
+	__m128d vertprod = _mm_mul_pd(unit, point);             // [ux*px  | uy*py ]   // 5c
+
+	__m128d swappedPoint = _mm_shuffle_pd(point, point, 1);
+	__m128d cross = _mm_mul_pd(unit, swappedPoint);         // [ ux*py | uy*px ]
+	__m128d merge = _mm_shuffle_pd(cross, vertprod, 0b01);  // [ uy*px | ux*px ]
+
+	__m128d negcross = _mm_xor_pd(cross, _mm_setr_pd(-0., 0.));  // [-ux*py | uy*px ]
+	__m128d merge2   = _mm_move_sd(vertprod, negcross);     // [-ux*py | uy*py ]
+
+	__m128d result = _mm_sub_pd(merge2, merge);             // [-ux*py - uy*px | ux*px - uy*py ]
+	return Point(result);
+
+		// [ -UxPy - UyPx | UxPx - UyPy ]
+		// [ -PxUy - PyUx | PxUx - PyUy ]
+
+#else
 	return Point(-unit.Y() * point.X() - unit.X() * point.Y(),
-		-unit.Y() * point.Y() + unit.X() * point.X());
+		     -unit.Y() * point.Y() + unit.X() * point.X());
+#endif
 }
 
 
