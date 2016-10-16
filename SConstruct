@@ -29,13 +29,17 @@ flags = ["-std=c++11", "-Wall"]
 if env["mode"] != "debug":
 	flags += ["-O3"]
 if env["mode"] == "lto":
-	flags += ["-flto=3", "-ffast-math", "-g"]  # 3 parallel optimization threads at link time
+	flags += ["-flto=2", "-ffast-math", "-g"]  # 2 parallel optimization threads at link time
 	env.Append(LINKFLAGS = [flags])
 if env["mode"] == "debug":
 	flags += ["-g"]
 if env["mode"] == "profile":
 	flags += ["-g",  "-pg"]
 	env.Append(LINKFLAGS = ["-g", "-pg"])
+
+customflags = ["-ffast-math", "-g"]
+flags += customflags
+env.Append(LINKFLAGS = customflags)
 
 # Required build flags. If you want to use SSE optimization, you can turn on
 # -msse3 or (if just building for your own computer) -march=native.
@@ -59,29 +63,20 @@ VariantDir("build/" + env["mode"], "source", duplicate = 0)
 
 bench_source = [ "/Mask.cpp", "/ImageBuffer.cpp", "/Angle.cpp", "/Random.cpp", "/File.cpp", "/Files.cpp" ]
 #+ Glob("/File*.cpp")
-
-#mc_microbench = env.Program("mask-contains", Glob("build/" + env["mode"] + bench_source))
-#mc_microbench = env.Program("mask-contains", [ Glob("build/" + env["mode"] + "/Mask.cpp"), Glob("build/" + env["mode"] + "/Angle.cpp") ] )
-#mc_microbench = env.Program("mask-contains", [ Glob("build/" + env["mode"]) ] + bench_source )
-
-
 bench_source = ["build/" + env["mode"] + x for x in bench_source]
 
-new_filenames = []
-#for x in bench_source:
-#    tmp = "build/" + env["mode"] + x
-#    new_filenames.append(tmp)
-#bench_source = new_filenames
-
-#import os.path
-#bench_source = [os.path.join("build/" + env["mode"], x) for x in bench_source]
-
-env.Append(CPPFLAGS = ["-DBENCHMARK_MASK"] )
 
 mc_microbench = env.Program("mask-contains", bench_source )
 sky = env.Program("endless-sky", Glob("build/" + env["mode"] + "/*.cpp"))
 
-BUILD_TARGETS.append("mask-contains")
+#env.Append(CPPFLAGS = ["-DBENCHMARK_MASK"] )
+#env.Replace(LIBS = [
+#	"SDL2",
+#	"png",
+#	"jpeg",
+#]);
+#BUILD_TARGETS.append("mask-contains")
+BUILD_TARGETS.append("endless-sky")
 
 
 # Install the binary:
