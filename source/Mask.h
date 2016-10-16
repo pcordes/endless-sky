@@ -63,11 +63,22 @@ public:
 	
 	
 private:
+	// prevents using an unaligned load to get next or previous when we need next.x - prev.x
+	struct xy_interleave {
+		static constexpr unsigned vecSize = 4;
+		static constexpr unsigned alignMask = vecSize-1;
+		alignas(64) float x[vecSize];
+		float dx[vecSize]; // current - prev;   prev.x = x-dx
+		float y[vecSize];
+		float dy[vecSize];
+	};
+	std::vector<xy_interleave> outline_simd;
 	std::vector<Point> outline;
 	double radius;
 public:
 	size_t OutlineCount() const { return outline.size(); }
 	double GetRadius() const { return radius; }
+	const std::vector<Point> &Outline() const { return outline; }
 };
 
 
