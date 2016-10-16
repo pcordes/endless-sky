@@ -2,6 +2,9 @@ import os
 
 # Load any environment variables that alter the build.
 env = Environment()
+if 'TERM' in os.environ:
+	env['ENV']['TERM'] = os.environ['TERM']
+
 if 'CCFLAGS' in os.environ:
 	env.Append(CCFLAGS = os.environ['CCFLAGS'])
 if 'CXXFLAGS' in os.environ:
