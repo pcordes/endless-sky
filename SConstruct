@@ -21,6 +21,7 @@ opts = Variables()
 opts.Add(PathVariable("PREFIX", "Directory to install under", "/usr/local", PathVariable.PathIsDirCreate))
 opts.Add(PathVariable("DESTDIR", "Destination root directory", "", PathVariable.PathAccept))
 opts.Add(EnumVariable("mode", "Compilation mode", "release", allowed_values=("release", "debug", "profile", "lto")))
+opts.Add(EnumVariable("targ", "Binary to build", "endless-sky", allowed_values=("endless-sky", "mask-contains")))
 opts.Update(env)
 
 Help(opts.GenerateHelpText(env))
@@ -32,7 +33,7 @@ if env["mode"] == "lto":
 	flags += ["-flto=2", "-ffast-math", "-g"]  # 2 parallel optimization threads at link time
 	env.Append(LINKFLAGS = [flags])
 if env["mode"] == "debug":
-	flags += ["-g"]
+	flags += ["-g", "-Og"]
 if env["mode"] == "profile":
 	flags += ["-g",  "-pg"]
 	env.Append(LINKFLAGS = ["-g", "-pg"])
@@ -69,14 +70,17 @@ bench_source = ["build/" + env["mode"] + x for x in bench_source]
 mc_microbench = env.Program("mask-contains", bench_source )
 sky = env.Program("endless-sky", Glob("build/" + env["mode"] + "/*.cpp"))
 
-#env.Append(CPPFLAGS = ["-DBENCHMARK_MASK"] )
-#env.Replace(LIBS = [
-#	"SDL2",
-#	"png",
-#	"jpeg",
-#]);
+#env.Append(CPPFLAGS = ["-DBENCHMARK_MASK"] )  # not needed, weak alias instead
+if env["targ"] == "mask-contains":
+        env.Replace(LIBS = [
+	        "SDL2",
+	        "png",
+	        "jpeg",
+        ]);
+
 #BUILD_TARGETS.append("mask-contains")
-BUILD_TARGETS.append("endless-sky")
+#BUILD_TARGETS.append("endless-sky")
+BUILD_TARGETS.append(env["targ"])
 
 
 # Install the binary:
