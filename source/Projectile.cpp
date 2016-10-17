@@ -235,14 +235,6 @@ double Projectile::CheckCollision(const Ship &ship, int step) const
 
 
 
-// Check if this projectile has a blast radius.
-bool Projectile::HasBlastRadius() const
-{
-	return (weapon->BlastRadius() > 0.);
-}
-
-
-
 // Check if the given ship is within this projectile's blast radius. (The
 // projectile will not explode unless it is also within the trigger radius.)
 bool Projectile::InBlastRadius(const Ship &ship, int step, double closestHit) const
@@ -270,39 +262,6 @@ void Projectile::Explode(list<Effect> &effects, double intersection, Point hitVe
 				position + velocity * intersection, velocity, angle, hitVelocity);
 		}
 	lifetime = -100;
-}
-
-
-
-// This projectile was killed, e.g. by an anti-missile system.
-void Projectile::Kill()
-{
-	lifetime = 0;
-}
-
-
-
-// Find out if this is a missile, and if so, how strong it is (i.e. what
-// chance an anti-missile shot has of destroying it).
-int Projectile::MissileStrength() const
-{
-	return weapon->MissileStrength();
-}
-
-
-
-// Get information on the weapon that fired this projectile.
-const Outfit &Projectile::GetWeapon() const
-{
-	return *weapon;
-}
-
-
-	
-// Find out which ship this projectile is targeting.
-const Ship *Projectile::Target() const
-{
-	return cachedTarget;
 }
 
 

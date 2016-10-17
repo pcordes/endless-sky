@@ -16,6 +16,7 @@ PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 #include "Angle.h"
 #include "Body.h"
 #include "Point.h"
+#include "Outfit.h"  // for inline definitions
 
 #include <list>
 #include <memory>
@@ -94,6 +95,22 @@ private:
 	bool hasLock = true;
 };
 
+// Check if this projectile has a blast radius.
+inline bool Projectile::HasBlastRadius() const
+{
+    return (weapon->BlastRadius() > 0.);
+}
 
+// This projectile was killed, e.g. by an anti-missile system.
+inline void Projectile::Kill() { lifetime = 0; }
 
+// Find out if this is a missile, and if so, how strong it is (i.e. what
+// chance an anti-missile shot has of destroying it).
+inline int Projectile::MissileStrength() const { return weapon->MissileStrength(); }
+
+// Get information on the weapon that fired this projectile.
+inline const Outfit &Projectile::GetWeapon() const { return *weapon; }
+
+// Find out which ship this projectile is targeting.
+inline const Ship *Projectile::Target() const { return cachedTarget; }
 #endif
