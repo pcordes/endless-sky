@@ -173,75 +173,9 @@ void Weapon::LoadWeapon(const DataNode &node)
 }
 
 
-
-bool Weapon::IsWeapon() const
+double Weapon::Range() const
 {
-	return isWeapon;
-}
-
-
-
-// Get assets used by this weapon.
-const Body &Weapon::WeaponSprite() const
-{
-	return sprite;
-}
-
-
-
-const Sound *Weapon::WeaponSound() const
-{
-	return sound;
-}
-
-
-
-const Outfit *Weapon::Ammo() const
-{
-	return ammo;
-}
-
-
-
-const Sprite *Weapon::Icon() const
-{
-	return icon;
-}
-
-
-
-// Effects to be created at the start or end of the weapon's lifetime.
-const map<const Effect *, int> &Weapon::FireEffects() const
-{
-	return fireEffects;
-}
-
-
-
-const map<const Effect *, int> &Weapon::LiveEffects() const
-{
-	return liveEffects;
-}
-
-
-
-const map<const Effect *, int> &Weapon::HitEffects() const
-{
-	return hitEffects;
-}
-
-
-
-const map<const Effect *, int> &Weapon::DieEffects() const
-{
-	return dieEffects;
-}
-
-
-
-const map<const Outfit *, int> &Weapon::Submunitions() const
-{
-	return submunitions;
+	return Velocity() * TotalLifetime();
 }
 
 
@@ -256,13 +190,6 @@ double Weapon::TotalLifetime() const
 		totalLifetime += lifetime;
 	}
 	return totalLifetime;
-}
-
-
-
-double Weapon::Range() const
-{
-	return Velocity() * TotalLifetime();
 }
 
 

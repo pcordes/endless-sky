@@ -218,6 +218,18 @@ inline double Weapon::IonDamage() const { return TotalDamage(ION_DAMAGE); }
 inline double Weapon::DisruptionDamage() const { return TotalDamage(DISRUPTION_DAMAGE); }
 inline double Weapon::SlowingDamage() const { return TotalDamage(SLOWING_DAMAGE); }
 
+inline bool Weapon::IsWeapon() const { return isWeapon; }
 
+// Get assets used by this weapon.
+inline const Body &Weapon::WeaponSprite() const { return sprite; }
+inline const Sound *Weapon::WeaponSound() const { return sound; }
+inline const Outfit *Weapon::Ammo() const { return ammo; }
+inline const Sprite *Weapon::Icon() const { return icon; }
 
+// Effects to be created at the start or end of the weapon's lifetime.
+inline const std::map<const Effect *, int> &Weapon::FireEffects() const { return fireEffects; }
+inline const std::map<const Effect *, int> &Weapon::LiveEffects() const { return liveEffects; }
+inline const std::map<const Effect *, int> &Weapon::HitEffects() const { return hitEffects; }
+inline const std::map<const Effect *, int> &Weapon::DieEffects() const { return dieEffects; }
+inline const std::map<const Outfit *, int> &Weapon::Submunitions() const { return submunitions; }
 #endif
