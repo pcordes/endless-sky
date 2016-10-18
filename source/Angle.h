@@ -171,3 +171,30 @@ inline Angle::Angle(int32_t angle)
 {
 }
 #endif
+
+/* rotate: clang output
+        movapd  xmm1, xmmword ptr [rax + _ZN5Angle15unitVectorCacheE]
+        movapd  xmm2, xmmword ptr [rsi]
+
+1c int? movapd  xmm0, xmm1 	// 1c integer domain on Merom??
+5c      mulpd   xmm0, xmm2	// 5c
+# vertprod ready in 6c  (or 5c with zero-latency mov)
+
+1c      shufpd  xmm2, xmm2, 1           # xmm2 = xmm2[1,0]
+5c      mulpd   xmm2, xmm1
+cross in 6c (or 7c from resource conflict)
+
+1c      movapd  xmm1, xmm2
+1c      shufpd  xmm1, xmm0, 1           # xmm1 = xmm1[1],xmm0[0]
+merge in 8c (or 9c RC)
+
+1c int  xorpd   xmm2, xmmword ptr [rip + .LCPI0_0]   # Integer domain on Core2
+negcross in bypass delay + 7c (or 8c RC)
+1c int  movsd   xmm0, xmm2              # any port
+merge2   in 8c (or 9c RC)
+
+bypass delay on input from movsd?
+3c      subpd   xmm0, xmm1
+result ready in 11c (or 12c RC)
+
+ */
