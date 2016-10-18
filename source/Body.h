@@ -59,9 +59,11 @@ public:
 	double Radius() const;
 	// Which color swizzle should be applied to the sprite?
 	int GetSwizzle() const;
-	// Get the sprite and mask for the given time step.
-	Frame GetFrame(int step = -1) const;
-	const Mask &GetMask(int step = -1) const;
+	// Get the sprite and mask for the given time step, or the current step
+	Frame GetFrame(int step) const;
+	Frame GetFrame() const;
+	const Mask &GetMask(int step) const;
+	const Mask &GetMask() const;
 	
 	// Positional attributes.
 	const Point &Position() const;
@@ -180,22 +182,11 @@ inline double Body::Radius() const
 // Which color swizzle should be applied to the sprite?
 inline int Body::GetSwizzle() const { return swizzle; }
 
-// Get the sprite for the given time step. If no time step is given, this will
-// return the frame from the most recently given step.
-inline Body::Frame Body::GetFrame(int step) const
+// the (int step) versions are probably better not to inline
+inline Body::Frame Body::GetFrame() const { return frame; }
+inline const Mask &Body::GetMask() const
 {
-	SetStep(step);
-	return frame;
-}
-
-// Get the mask for the given time step. If no time step is given, this will
-// return the mask from the most recently given step.
-inline const Mask &Body::GetMask(int step) const
-{
-	static const Mask empty;
-
-	SetStep(step);
-	return (mask ? *mask : empty);
+	return (mask ? *mask : Mask::emptymask);
 }
 
 // Position, in world coordinates (zero is the system center).

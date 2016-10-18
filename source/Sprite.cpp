@@ -115,9 +115,8 @@ uint32_t Sprite::Texture(int frame) const
 	
 const Mask &Sprite::GetMask(int frame) const
 {
-	static const Mask empty;
 	if(masks.empty() || masks.size() != textures.size())
-		return empty;
+		return Mask::emptymask;
 	
 	return masks[frame % masks.size()];
 }

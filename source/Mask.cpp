@@ -21,6 +21,15 @@ PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
 using namespace std;
 
+// Default constructor.
+Mask::Mask()
+	: radius(0.)
+{
+}
+
+const Mask Mask::emptymask;
+
+
 namespace {
 	// Trace out a pixmap.
 	void Trace(const ImageBuffer *image, vector<Point> *raw)

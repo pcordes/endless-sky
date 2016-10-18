@@ -87,13 +87,30 @@ void Body::SaveSprite(DataWriter &out) const
 	out.EndChild();
 }
 
+
+// Get the sprite for the given time step. If no time step is given, this will
+// return the frame from the most recently given step.
+Body::Frame Body::GetFrame(int step) const
+{
+	SetStep(step);
+	return GetFrame();
+}
+
+// Get the mask for the given time step. If no time step is given, this will
+// return the mask from the most recently given step.
+const Mask &Body::GetMask(int step) const
+{
+	SetStep(step);
+	return GetMask();
+}
+
 // Set the current time step.
 void Body::SetStep(int step) const
 {
 	// If the step is negative or there is no sprite, do nothing. This updates
 	// and caches the mask and the frame so that if further queries are made at
 	// this same time step, we don't need to redo the calculations.
-	if(step < 0 || !sprite || !sprite->Frames() || step == currentStep)
+	if(step == currentStep || !sprite || !sprite->Frames())
 		return;
 	currentStep = step;
 	

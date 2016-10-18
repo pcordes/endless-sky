@@ -55,7 +55,8 @@ public:
 	// Find out how close the given point is to the mask.
 	double Range(Point point, Angle facing) const;
 	
-	
+	static const Mask& EmptyMask();
+	static const Mask emptymask;
 private:
 public:
 	double Intersection(Point sA, Point vA) const;
@@ -82,11 +83,10 @@ public:
 };
 
 
-// Default constructor.
-inline Mask::Mask() : radius(0.) {}
 // Check whether a mask was successfully loaded.  inline to save code size
 inline bool Mask::IsLoaded() const {
 	return !outline.empty();
 }
+inline const Mask& Mask::EmptyMask() { return emptymask; }
 
 #endif
