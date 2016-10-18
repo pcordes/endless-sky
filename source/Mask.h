@@ -64,28 +64,28 @@ public:
 	
 	
 private:
-	// prevents using an unaligned load to get next or previous when we need next.x - prev.x
 	struct xy_interleave {
 		static constexpr unsigned vecSize = 4;
 		static constexpr unsigned alignMask = vecSize-1;
 		alignas(64) float x[vecSize];
-		float dx[vecSize]; // current - prev;   prev.x = x-dx
 		float y[vecSize];
+		// TODO: reduce cache footprint by calculating this on the fly, maybe with an unalinged load?
+		float dx[vecSize]; // next - current;   next.x = x+dx
 		float dy[vecSize];
 	};
 	std::vector<xy_interleave> outline_simd;
-	std::vector<Point> outline;
+//	std::vector<Point> outline;
 	double radius;
 public:
-	size_t OutlineCount() const { return outline.size(); }
+	size_t OutlineCount() const { return outline_simd.size() * xy_interleave::vecSize; }
 	double GetRadius() const { return radius; }
-	const std::vector<Point> &Outline() const { return outline; }
+	const std::vector<xy_interleave> &Outline_simd() const { return outline_simd; }
 };
 
 
 // Check whether a mask was successfully loaded.  inline to save code size
 inline bool Mask::IsLoaded() const {
-	return !outline.empty();
+	return !outline_simd.empty();
 }
 inline const Mask& Mask::EmptyMask() { return emptymask; }
 

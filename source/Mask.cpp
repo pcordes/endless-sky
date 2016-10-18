@@ -211,6 +211,7 @@ namespace {
 		// Bail out if we couldn't find top and bottom vertices.
 		if(top == bottom)
 		{
+			// happens for the cloaked ship: no outline points
 			cerr << "couldn't find top and bottom points to simplify mask\n";
 			return;
 		}
@@ -220,17 +221,6 @@ namespace {
 		result->push_back(raw[bottom]);
 		Simplify(raw, bottom, top, result);
 	}
-	
-	
-	// Find the radius of the object.
-	double Radius(const vector<Point> &outline)
-	{
-		double radius = 0.;
-		for(const Point &p : outline)
-			radius = max(radius, p.LengthSquared());
-		return sqrt(radius);
-	}
-	unsigned empty_outlines = 0; 
 }
 
 
@@ -239,26 +229,29 @@ namespace {
 // must therefore be a 4-byte RGBA format.)
 void Mask::Create(const ImageBuffer *image)
 {
+	vector<Point> outline;  // used to be a class member
+	{
 	vector<Point> raw;
 	Trace(image, &raw);
 	
 	SmoothAndCenter(&raw, Point(image->Width(), image->Height()));
 	
 	Simplify(raw, &outline);
-	
-	radius = Radius(outline);
+	// destroy raw here, before allocating outline_simd
+	}
+
+//	radius = Radius(outline);
 
 	if(outline.empty())
 	{
-		empty_outlines++;
+		// happens for the cloaked ship: a single transparent pixel
 		cerr << "Mask::Create: bailing early on empty outline\n";
 		return;
 	}
+
 	// copy into a SIMD-friendly layout
 	const unsigned vecSize = xy_interleave::vecSize;
 
-	// FIXME: dx = next-current, not current-prev
-//	Point prev = outline.back();
 	Point repeat = outline.front();
 	do { // repeat at least once so outline[i+1] gets the last->first segment for i=last
 		outline.emplace_back(repeat);
@@ -266,6 +259,7 @@ void Mask::Create(const ImageBuffer *image)
 
 	unsigned fullVectors = outline.size() & ~(vecSize-1);
 	outline_simd.reserve(fullVectors/vecSize);
+	float rSquared = 0;
 	for(unsigned i=0 ; i<fullVectors ; )
 	{
 		xy_interleave tmp;
@@ -277,12 +271,16 @@ void Mask::Create(const ImageBuffer *image)
 			tmp.y[j] = curr.Y();
 //			outline_simd[i/4].x[j]
 //			outline_simd[i/4].y[j] = outline[i].Y();
+			rSquared = max(rSquared, tmp.x[j]*tmp.x[j] + tmp.y[j]*tmp.y[j]);
 
 			Point delta = next - curr;
 			tmp.dx[j] = delta.X();
 			tmp.dy[j] = delta.Y();
-			++i;
+			++i;  // loop over vector<Point>
 		}
+#ifdef __SSE2__
+#else
+#endif
 		outline_simd.emplace_back(tmp);
 	}
 
@@ -309,6 +307,7 @@ void Mask::Create(const ImageBuffer *image)
 		outline_simd.emplace_back(tmp);
 	}
 */
+	radius = sqrt(rSquared);
 }
 
 
@@ -323,7 +322,7 @@ double Mask::Collide(Point sA, Point vA, Angle facing) const
 {
 	// Bail out if we're too far away to possibly be touching.
 	double distance = sA.Length();
-	if(outline.empty() || distance > radius + vA.Length())
+	if(outline_simd.empty() || distance > radius + vA.Length())
 		return 1.;
 	
 	// Rotate into the mask's frame of reference.
@@ -340,8 +339,7 @@ double Mask::Collide(Point sA, Point vA, Angle facing) const
 	if(distance <= radius && Contains(sA))
 		return 0.;
 
-	// TODO: divide into quadrants, and only check the pieces of the outline in that quad
-	// if outline.size() > 16
+	// TODO: divide into quadrants, and only check the pieces of the outline in that quad if outline.size() > 16
 	return Intersection(sA, vA);
 }
 // d > r + vl
@@ -363,7 +361,7 @@ double Mask::Collide(Point sA, Point vA, Angle facing) const
 // Check whether the mask contains the given point.
 bool Mask::Contains(Point point, Angle facing) const
 {
-	if(outline.empty() || point.OutOfRange(radius))
+	if(outline_simd.empty() || point.OutOfRange(radius))
 		return false;
 	
 	// Rotate into the mask's frame of reference.
@@ -377,18 +375,46 @@ bool Mask::Contains(Point point, Angle facing) const
 bool Mask::WithinRange(Point point, Angle facing, double range) const
 {
 	// Bail out if the object is too far away to possible be touched.
-	if(outline.empty() || range < point.Length() - radius)
+	if(outline_simd.empty() || point.OutOfRange(range + radius))  // was range < point.Length() - radius
 		return false;
-	
+
 	// Rotate into the mask's frame of reference.
 	point = (-facing).Rotate(point);
+
+#ifdef __SSE2__
+	__m128 point_ps = _mm_cvtpd_ps(point);
+	const __m128 px = _mm_set1_ps(point_ps[0]);
+	const __m128 py = _mm_set1_ps(point_ps[1]);
+	const __m128 range2 = _mm_set1_ps(float(range*range));
+	for(const xy_interleave &curr : outline_simd)
+		for(unsigned j = 0; j < curr.vecSize; j+=4)
+		{
+			__m128 dx = _mm_load_ps(curr.x + j) - px;
+			__m128 dy = _mm_load_ps(curr.y + j) - py;
+			__m128 cmp = _mm_cmplt_ps(dx*dx - range2, dy*dy);  // transform the inequality for more ILP
+			if(_mm_movemask_ps(cmp))
+				return true;
+		}
+#else
 	// For efficiency, compare to range^2 instead of range.
-	range *= range;
-	
-	for(const Point &p : outline)
-		if(p.DistanceSquared(point) < range)
-			return true;
-	
+	float range2 = range * range;
+	float px = point.X();
+	float py = point.Y();
+	for(const xy_interleave &curr : outline_simd)
+		for (unsigned j = 0; j < curr.vecSize; ++j)
+		{
+			float dx = curr.x[j] - px;
+			float dy = curr.y[j] - py;
+			if(dx*dx + dy*dy < range2)
+				return true;
+		}
+#endif
+
+	// FIXME: why did the original ignore the case of a tiny range
+	// for a point near the centre of the mask, farther from any points?
+//	if(range < radius)
+//		return Contains(point);
+
 	return false;
 }
 
@@ -397,17 +423,45 @@ bool Mask::WithinRange(Point point, Angle facing, double range) const
 // Find out how close the given point is to the mask.
 double Mask::Range(Point point, Angle facing) const
 {
-	double range = numeric_limits<double>::infinity();
-	
 	// Rotate into the mask's frame of reference.
 	point = (-facing).Rotate(point);
 	if(Contains(point))
 		return 0.;
-	
-	for(const Point &p : outline)
-		range = min(range, p.DistanceSquared(point));
-	
-	return sqrt(range);
+
+#ifdef __SSE2__
+	__m128 point_ps = _mm_cvtpd_ps(point);
+	const __m128 px = _mm_set1_ps(point_ps[0]);
+	const __m128 py = _mm_set1_ps(point_ps[1]);
+	__m128 range2 = _mm_set1_ps(numeric_limits<float>::infinity());
+	for(const xy_interleave &curr : outline_simd)
+		for(unsigned j = 0; j < curr.vecSize; j+=4)
+		{
+			__m128 dx = _mm_load_ps(curr.x + j) - px;
+			__m128 dy = _mm_load_ps(curr.y + j) - py;
+			__m128 d2 = dx*dx + dy*dy;
+			range2 = _mm_min_ps(range2, d2);
+		}
+	__m128 high64 = _mm_movehl_ps(px, range2);   // px is just a convenient dead variable to avoid a MOVAPS
+	__m128 min2  = _mm_min_ps(range2, high64);   // last 2 elements
+	__m128 sqrt2 = _mm_sqrt_ps(min2);            // force use of sqrtps instead of rsqrt + newton, for smaller code-size in this infrequently-used function
+	__m128d double2 = _mm_cvtps_pd(sqrt2);
+	return min(double2[0], double2[1]);
+#else
+	float range2 = numeric_limits<float>::infinity();
+	float px = point.X();
+	float py = point.Y();
+	for(const xy_interleave &curr : outline_simd)
+		for (unsigned j = 0; j < curr.vecSize; ++j)
+		{
+			float dx = curr.x[j] - px;
+			float dy = curr.y[j] - py;
+			range2 = min(range2, dx*dx + dy*dy);
+		}
+	return sqrtf(range2);
+#endif
+//	for(const Point &p : outline)
+//		range2 = min(range2, p.DistanceSquared(point));
+
 }
 
 
@@ -446,7 +500,7 @@ double Mask::Intersection(Point sA, Point vA) const
 #else // outline_simd
 
 namespace {
-	inline float Crossf(float Ax, float Ay, float Bx, float By)
+	inline float __attribute__((unused)) Crossf(float Ax, float Ay, float Bx, float By)
 	{
 		return Ax * By - Ay * Bx;
 	}
@@ -457,12 +511,11 @@ namespace {
 		return Ax * By - Ay * Bx;    // GNU vector extensions for operators instead of _mm functions
 	}
 
-	inline __m128 blendOnSignBit(__m128 old, __m128 newVal, __m128 updateMask)
+	inline __m128 __attribute__((unused)) blendOnSignBit(__m128 old, __m128 newVal, __m128 updateMask)
 	{
 #ifdef __SSE41__
 		return _mm_blendv_ps(old, newVal, updateMask);
 #else
-		//#warning FIXME blend
 		__m128i iold = _mm_castps_si128(old);
 		__m128i inew = _mm_castps_si128(newVal);
 		__m128i iupdate = _mm_srai_epi32(_mm_castps_si128(updateMask), 31);  // broadcast the sign bit
@@ -516,7 +569,6 @@ double Mask::Intersection(Point sA, Point vA) const
 				// outline, find out how far along the query vector it occurs and
 				// remember it if it is the closest so far.
 
-				// if((uB >= 0.) & (uB < cross) & (uA >= 0.))
 				// TODO: camelCase these varnames somehow, even though they already include caps?
 				__m128 uB_lt_cross = _mm_cmplt_ps(uB, cross);
 				// use int vectors because we eventually feed into a shift to broadcast the sign bit
@@ -524,17 +576,16 @@ double Mask::Intersection(Point sA, Point vA) const
 				__m128i uA_uB_or_cross_neg = _mm_or_si128(uB_or_cross_neg, _mm_castps_si128(uA));
 				// only the sign bit is the truth value
 
-				//__m128 uA_or_uB_negative = _mm_or_ps(uA, uB);
-				// uB>=0. is true iff the sign bit is 0.  We treat negative 0 as meaning less than 0 with underflow
-
 				__m128i updateMin = _mm_andnot_si128(uA_uB_or_cross_neg, _mm_castps_si128(uB_lt_cross));
+				// uB>=0. is true iff the sign bit is 0, except for negative 0.  We treat that as meaning less than 0 with underflow
+				// (uB >= 0.) & (uB < cross) & (uA >= 0.) & (cross > 0)
 				if(_mm_movemask_ps(_mm_castsi128_ps(updateMin)))
 				{
 					// divide + blend (without SSE4) are expensive enough to branch for,
 					// and this is probably very rare
 
 					// broadcast the sign bit to make elements of all-zero or all-one
-					__m128 mask = _mm_castsi128_ps( _mm_srai_epi32(updateMin, 31) );
+					__m128 mask = _mm_castsi128_ps(_mm_srai_epi32(updateMin, 31));
 
 					// instead of blending after min, produce +Infinity in elements we don't want to update
 					// SSE math doesn't slow down on NaN or Inf, so this is fine
@@ -542,8 +593,7 @@ double Mask::Intersection(Point sA, Point vA) const
 					// force uA to be positive, because -x / +0.0 is -Infinity
 					uA    = _mm_and_ps(uA, _mm_castsi128_ps(_mm_set1_epi32(0x7FFFFFFF)) );
 					__m128 uA_over_cross = _mm_div_ps(uA, cross);
-					__m128 newMin = _mm_min_ps(uA_over_cross, closest); // if unordered, min takes the 2nd operand
-					closest = newMin;
+					closest = _mm_min_ps(uA_over_cross, closest); // if unordered, min takes the 2nd operand
 					//closest = blendOnSignBit(closest, newMin, updateMin);
 				}
 			}
@@ -596,135 +646,69 @@ double Mask::Intersection(Point sA, Point vA) const
 
 
 
-/*
-  [ Vx   Vx   Vx   Vx ]
-  [ Vy   Vy   Vy   Vy ]
 
-  [ x0   x1   x2   x3 ]
-  [ y0   y1   y2   y3 ]
-  [ dx0 dx1  dx2  dx3 ]
-  [ dy0 dy1  dy2  dy3 ]
-
- */
-#if 1
 // outline_simd version
-bool Mask::Contains(Point point) const
-{
-	int intersections = 0;
-
-	float Vx = point.X();
-	float Vy = point.Y();
-	for(const xy_interleave &curr : outline_simd)
-	{
-		//Point dn  = point - next;
-		//bool dnXSign = signbit(dn.X());
-//		unsigned dnXSign = (point.X() < next.X());
-
-		for(unsigned i=0; i<xy_interleave::vecSize; )
-		{
-#if 0 //def __SSE2__
-			const __m128 VX = _mm_set1_ps(Vx);
-			const __m128 VY = _mm_set1_ps(Vy);
-
-		// maybe handle the last -> first at the end, instead of at the start
-		// maybe by forcing duplication of the first point?
-		// probably silly if we have to handle the gap between interleave blocks anyway
-			__m128 cx = _mm_load_ps(curr.x + i);
-			__m128 segx = _mm_load_ps(curr.dx + i);
-			__m128 px = cx - segx;
-			__m128 cmpCurr = _mm_cmplt_ps(VX, cx);
-			__m128 cmpPrev = _mm_cmplt_ps(VX, px);
-
-			__m128 segy = _mm_load_ps(curr.dy + i);
-
-
-//			__m128 segY_dx = _mm_mul_ps();
-
-/*
-
-//		if(dpXSign != dnXSign) {
-		if((prev.X() <= point.X()) == (point.X() < next.X()))  // 1245ms kestrel with gcc5.2
-		{
-			Point seg = next - prev;
-			Point dp = point - prev;
-
-			bool yGEpoint = seg.Y() * dp.X() >= dp.Y() * seg.X();
-			// Multiplying both sides inverted the inequality if seg.X() is negative
-			yGEpoint ^= signbit(seg.X());
-*/
-			i+=4;
-#else
-			float prevX = curr.x[i] - curr.dx[i];
-			if ((prevX <= Vx) == (Vx < curr.x[i]))
-			{
-				float dpx = Vx - prevX;
-				float dpy = Vy - (curr.y[i] - curr.dy[i]);
-				float rhs = curr.dx[i] * dpy;
-				float lhs = curr.dy[i] * dpx;
-
-				bool yGEpoint = lhs >= rhs;
-				yGEpoint ^= signbit(curr.dx[i]);
-				intersections += yGEpoint;
-			}
-			i++;
-#endif
-		}
-	}
-	// If the number of intersections is odd, the point is within the mask.
-	return (intersections & 1);
-}
-
-
-#else   // non-outline_simd
-
 bool Mask::Contains(Point point) const
 {
 	// If this point is contained within the mask, a ray drawn out from it will
 	// intersect the mask an even number of times. If that ray coincides with an
 	// edge, ignore that edge, and count all segments as closed at the start and
 	// open at the end to avoid double-counting.
-	
+
 	// For simplicity, use a ray pointing straight downwards. A segment then
 	// intersects only if its x coordinates span the point's coordinates.
-	int intersections = 0;
-	Point prev = outline.back();
-//	Point dp = point - prev;      // diff to previous
-//	bool dpXSign = signbit(dp.X());
-
-	//asm ("xor %k0,%k0" : "+r"(dpXSign)); // gcc is dumb and causes partial-reg stalls on Core2
-	unsigned dpXSign = (point.X() < prev.X());
-
-	for(const Point &next : outline)
-	{
-#if 1
-/*
-  [ Vx   Vx   Vx   Vx ]
-  [ Vy   Vy   Vy   Vy ]
-  [ x0   x1   x2   x3 ]
-  [ y0   y1   y2   y3 ]
-
-  
-
- */
-
-
-		//Point dn  = point - next;
-		//bool dnXSign = signbit(dn.X());
-		unsigned dnXSign = (point.X() < next.X());
-
-//		if(dpXSign != dnXSign) {
-		if((prev.X() <= point.X()) == (point.X() < next.X()))  // 1245ms kestrel with gcc5.2
-		{
-			Point seg = next - prev;
-			Point dp = point - prev;
 #ifdef __SSE2__
-			__m128d dpSwap = _mm_shuffle_pd(dp, dp, 1);
-			__m128d cross  = _mm_mul_pd(dpSwap, seg);   // [ dpY*segX | dpX*segY ]
-			__m128d dpXsegY = _mm_unpackhi_pd(cross, cross); // TODO: MOVHLPS?
-			__m128d cmp    = _mm_cmple_sd(cross, dpXsegY);
-			cmp = _mm_xor_pd(seg, cmp);
-			unsigned yGEpoint = _mm_movemask_pd(cmp) & 1;  // just the low bit
+	__m128 point_ps = _mm_cvtpd_ps(point);
+	const __m128 Vx = _mm_set1_ps(point_ps[0]);
+	const __m128 Vy = _mm_set1_ps(point_ps[1]);
+
+	// Instead of actually adding and checking odd/even, just XOR (add-without-carry) in the sign bit of each element
+	__m128 intersections = _mm_setzero_ps();
+
+	for(const xy_interleave &curr : outline_simd)
+	{
+		for(unsigned i=0; i<xy_interleave::vecSize; )
+		{
+			__m128 currx = _mm_load_ps(curr.x + i);
+			__m128 segx  = _mm_load_ps(curr.dx + i);
+			__m128 nextx = currx + segx;
+
+			__m128 cmpCurr = _mm_cmplt_ps(Vx, currx);
+			__m128 cmpNext = _mm_cmplt_ps(Vx, nextx);
+			__m128 xIntersect = _mm_xor_ps(cmpCurr, cmpNext); // gte one, less than the other
+			if(true || _mm_movemask_ps(xIntersect))  // early out check if all points fail
+			{
+				__m128 curry = _mm_load_ps(curr.y + i);
+				__m128 segy = _mm_load_ps(curr.dy + i);
+
+				__m128 dcx = Vx - currx;
+				__m128 dcy = Vy - curry;
+				__m128 yGEpoint = _mm_cmpge_ps(segy * dcx, segx * dcy);
+				yGEpoint = _mm_xor_ps(yGEpoint, currx); // the inequality is inverted if curr.x is negative
+				yGEpoint = _mm_and_ps(yGEpoint, xIntersect);
+				// sign bits have the truth values, we can use it directly without a compare
+				intersections = _mm_xor_ps(intersections, yGEpoint);
+			}
+			i+=4;
+		}
+	}
+	unsigned mask = _mm_movemask_ps(intersections);
+	mask ^= mask >> 2;   // parity of the 4-bit mask.  x86 has a parity flag, but IDK how to get a compiler to use it
+	mask ^= mask >> 1;
+	return mask & 1;
 #else
+	bool intersections_odd = false;
+	const float Vx = point.X();
+	const float Vy = point.Y();
+	for(const xy_interleave &curr : outline_simd)
+	{
+		for(unsigned i=0; i<xy_interleave::vecSize; )
+		{
+			float nextX = curr.x[i] + curr.dx[i];
+			if ((curr.x[i] <= Vx) == (Vx < nextX))
+			{
+				float dcx = Vx - curr.x[i];
+				float dcy = Vy - curr.y[i];
 			// Avoid a division by multiplying both sides of the inequality, and bring both seg.X terms to one side
 			// if fast-math disables denormals, seg.X can be 0 with dp.X not quite zero
 			// This leads to a miscount, but no crash.
@@ -732,39 +716,19 @@ bool Mask::Contains(Point point) const
 			// however, it still only happens if the point is inside the mask radius
 
 			// Our trace algo steps by 0.25, so this is not a concern in practice
-			bool yGEpoint = seg.Y() * dp.X() >= dp.Y() * seg.X();
-			// Multiplying both sides inverted the inequality if seg.X() is negative
-			yGEpoint ^= signbit(seg.X());
-#endif
-
-			intersections += yGEpoint;
+				//bool yGEpoint = seg.Y() * dp.X() >= dp.Y() * seg.X();
+				bool yGEpoint = (curr.dy[i] * dcx >= curr.dx[i] * dcy);
+				yGEpoint ^= signbit(curr.dx[i]);
+				// Multiplying both sides inverted the inequality if seg.X() is negative
+				intersections_odd ^= yGEpoint;
+			}
+			i++;
 		}
-
-		prev = next;
-//		dp = dn;
-		dpXSign = dnXSign;
-#else
-		if((prev.X() <= point.X()) == (point.X() < next.X()))
-		{
-			// This check excludes the next.X() == prev.X() case,
-			// so divide by zero is impossible (except with flush-to-zero if the difference underflows)
-			// Can nX - pX == 0 while nX and pX are one or two ulp apart?  so pX == point.X but point.X < nX
-			// Denormals are Zero on input affects compares, but FTZ output only affects sub
-			// Bruce Dawson says this can be a problem without denormals:
-			// https://randomascii.wordpress.com/2012/05/20/thats-not-normalthe-performance-of-odd-floats/
-			// of course if we need to check, checking nX-pX != 0. is the way to go
-			double y = prev.Y() + (next.Y() - prev.Y()) *
-				(point.X() - prev.X()) / (next.X() - prev.X());
-			intersections += (y >= point.Y());
-		}
-		prev = next;
-#endif
 	}
 	// If the number of intersections is odd, the point is within the mask.
-	return (intersections & 1);
+	return intersections_odd;
+#endif
 }
-
-#endif  // outline_simd
 
 /*
   seg = next - prev;
@@ -794,7 +758,7 @@ bool Mask::Contains(Point point) const
  */
 
 
-#if 0 //def BENCHMARK_MASK
+#if 1 //def BENCHMARK_MASK
 
 /*
 class TestMask: public Mask {
@@ -812,7 +776,7 @@ public:
 #include <float.h>
 //#include "Random.h"
 
-int main(int argc, char*argv[])
+extern "C" int test_main(int argc, char*argv[])
 {
 	Mask msk;
 	if (argc <= 1){
@@ -833,16 +797,18 @@ int main(int argc, char*argv[])
 		msk.Create(img);
 		delete img;
 		printf("%s : %lu\n", argv[argc], msk.OutlineCount());
+/*
 		const vector<Point> &outline = msk.Outline();
 		Point prev = outline.back();
 		for (const Point &curr : outline) {
 			// std::numeric_limits<double>::min()
-//			if (fabs( (prev-curr).X() ) <= 100*DBL_MIN && prev.X() != curr.X()) {
+			if (fabs( (prev-curr).X() ) <= 100*DBL_MIN && prev.X() != curr.X()) {
 				//	printf("%8g\t%8g\n", prev.X(), prev.Y());
 				printf("%8g\t%8g\tdx=%g\n", curr.X(), curr.Y(), (prev-curr).X());
-//			}
+			}
 			prev = curr;
 		}
+*/
 	}
 
 
@@ -858,6 +824,12 @@ int main(int argc, char*argv[])
 			total += msk.Contains(p);
 	}
 	printf("total contain hits = %d\n", total);
+	return 0;
 }
 
+# define weak_alias(name, aliasname) _weak_alias (name, aliasname)
+# define _weak_alias(name, aliasname) \
+  extern __typeof (name) aliasname __attribute__ ((weak, alias (#name)));
+
+weak_alias(test_main, main)
 #endif
