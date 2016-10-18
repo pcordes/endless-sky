@@ -15,6 +15,7 @@ PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
 #include "Point.h"
 #include "Angle.h"
+#include "Outfit.h"
 
 #include <list>
 
@@ -87,6 +88,43 @@ private:
 	bool wasFiring = false;
 };
 
+// Get the weapon in this hardpoint. This returns null if there is none.
+inline const Outfit *Hardpoint::GetOutfit() const { return outfit; }
 
+// Get the location, relative to the center of the ship, from which
+// projectiles of this weapon should originate.
+inline const Point &Hardpoint::GetPoint() const { return point; }
+
+// Get the convergence angle adjustment of this weapon (guns only, not turrets).
+inline const Angle &Hardpoint::GetAngle() const { return angle; }
+
+// Find out if this is a turret hardpoint (whether or not it has a turret
+// installed).
+inline bool Hardpoint::IsTurret() const { return isTurret; }
+
+// Find out if this hardpoint has a homing weapon installed.
+inline bool Hardpoint::IsHoming() const
+{
+	return outfit && outfit->Homing();
+}
+
+// Find out if this hardpoint has an anti-missile installed.
+inline bool Hardpoint::IsAntiMissile() const
+{
+	return outfit && outfit->AntiMissile() > 0;
+}
+
+// Check if this weapon is ready to fire.
+inline bool Hardpoint::IsReady() const
+{
+	return outfit && burstReload <= 0. && burstCount;
+}
+
+// Check if this weapon fired the last time it was able to fire. This is to
+// figure out if the stream spacing timer should be applied or not.
+inline bool Hardpoint::WasFiring() const { return wasFiring; }
+
+// Get the number of remaining burst shots before a full reload is required.
+inline int Hardpoint::BurstRemaining() const { return burstCount; }
 
 #endif
