@@ -29,9 +29,9 @@ public:
 	Point();
 	Point(double x, double y);
 #ifndef POD_POINT
-	Point(const Point &point);  // no need to make this a non-POD type
+	Point(const Point &point);    // makes this a non-POD type for ABI arg-passing purposes
 	// non-POD may actually improve pass & return by-value.
-	// With the union definition, x and y go in separate registers
+	// With the union definition, x and y go in separate registers, so we avoid that when possible
 	//Point &operator=(const Point &point);   // why overload this at all?
 #endif
 
@@ -91,7 +91,7 @@ private:
 #ifdef __SSE2__
 public:
 	// Private constructor, using a vector.
-	Point(const __m128d &v);
+	explicit Point(const __m128d &v);
 	operator __m128d() const { return v; }
 
 private:
@@ -123,10 +123,13 @@ private:
 // rather than in two separate XMM registers for scalar x and y
 
 // http://stackoverflow.com/questions/26554829/how-to-access-simd-vector-elements-when-overloading-array-access-operators
-inline double &Point::X()       { return reinterpret_cast<double &>(v); }
-inline double  Point::X() const { return v[0]; }
-inline double &Point::Y()       { return *(reinterpret_cast<double *>(&v) + 1); }  // v[1] doesn't work
-inline double  Point::Y() const { return v[1]; }
+// long reinterp_used = 0;
+inline double &Point::X()       { /*reinterp_used++;*/ return reinterpret_cast<double &>(v); }
+inline double  Point::X() const { return reinterpret_cast<const double &>(v); }
+inline double &Point::Y()       { /* reinterp_used++;*/ return *(reinterpret_cast<double *>(&v) + 1); }  // v[1] doesn't work
+inline double  Point::Y() const { return *(reinterpret_cast<const double *>(&v) + 1); }  // v[1] doesn't work
+//inline double  Point::X() const { return v[0]; }
+//inline double  Point::Y() const { return v[1]; }
 #else
 inline double &Point::X()       { return x; }
 inline double  Point::X() const { return x; }
