@@ -31,14 +31,6 @@ Sprite::Sprite(const string &name)
 }
 
 
-
-const string &Sprite::Name() const
-{
-	return name;
-}
-
-
-
 void Sprite::AddFrame(int frame, ImageBuffer *image, Mask *mask, bool is2x)
 {
 	if(!image || frame < 0)
@@ -101,34 +93,12 @@ void Sprite::Unload()
 }
 
 
-
-float Sprite::Width() const
-{
-	return width;
-}
-
-
-
-float Sprite::Height() const
-{
-	return height;
-}
-
-
-
-int Sprite::Frames() const
-{
-	return textures.size();
-}
-
-
-
+/* unused
 Point Sprite::Center() const
 {
 	return Point(.5 * width, .5 * height);
 }
-
-
+*/
 
 uint32_t Sprite::Texture(int frame) const
 {

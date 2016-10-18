@@ -38,6 +38,7 @@ public:
 	
 	void AddFrame(int frame, ImageBuffer *image, Mask *mask, bool is2x);
 	// Free up all textures loaded for this sprite.
+	// not done with a destructor so it's easier to do it while not holding a lock (in SpriteQueue::DoLoad)
 	void Unload();
 	
 	float Width() const;
@@ -46,7 +47,7 @@ public:
 	
 	// Get the offset of the center from the top left corner; this is for easy
 	// shifting of corner to center coordinates.
-	Point Center() const;
+//	Point Center() const;  // unused
 	
 	uint32_t Texture(int frame = 0) const;
 	const Mask &GetMask(int frame = 0) const;
@@ -63,6 +64,8 @@ private:
 	float height;
 };
 
-
-
+inline const std::string &Sprite::Name() const { return name; }
+inline float Sprite::Width() const { return width; }
+inline float Sprite::Height() const { return height; }
+inline int Sprite::Frames() const { return textures.size(); }
 #endif
