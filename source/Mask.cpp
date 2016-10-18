@@ -237,7 +237,7 @@ namespace {
 
 // Construct a mask from the alpha channel of an SDL surface. (The surface
 // must therefore be a 4-byte RGBA format.)
-void Mask::Create(ImageBuffer *image)
+void Mask::Create(const ImageBuffer *image)
 {
 	vector<Point> raw;
 	Trace(image, &raw);
