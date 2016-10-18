@@ -132,14 +132,6 @@ void Armament::Swap(int first, int second)
 
 
 
-// Access the array of weapon hardpoints.
-const vector<Hardpoint> &Armament::Get() const
-{
-	return hardpoints;
-}
-
-
-
 // Determine how many fixed gun hardpoints are on this ship.
 int Armament::GunCount() const
 {

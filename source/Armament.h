@@ -82,5 +82,6 @@ private:
 };
 
 
-
+// Access the array of weapon hardpoints.
+inline const std::vector<Hardpoint> &Armament::Get() const { return hardpoints; }
 #endif
