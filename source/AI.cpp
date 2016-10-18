@@ -658,14 +658,14 @@ shared_ptr<Ship> AI::FindTarget(const Ship &ship, const list<shared_ptr<Ship>> &
 	bool outfitScan = ship.Attributes().Get("outfit scan");
 	if(!target && (cargoScan || outfitScan) && !isPlayerEscort)
 	{
-		closest = numeric_limits<double>::infinity();
+		double closest = numeric_limits<double>::infinity();
 		for(const auto &it : ships)
 			if(it->GetSystem() == system && it->GetGovernment() != gov && it->IsTargetable())
 			{
 				if((cargoScan && !Has(ship.GetGovernment(), it, ShipEvent::SCAN_CARGO))
 						|| (outfitScan && !Has(ship.GetGovernment(), it, ShipEvent::SCAN_OUTFITS)))
 				{
-					double range = it->Position().Distance(ship.Position());
+					double range = it->Position().DistanceSquared(ship.Position());
 					if(range < closest)
 					{
 						closest = range;
@@ -838,7 +838,7 @@ void AI::MoveIndependent(Ship &ship, Command &command) const
 		MoveToPlanet(ship, command);
 		if(!ship.GetPersonality().IsStaying() && ship.Attributes().Get("fuel capacity"))
 			command |= Command::LAND;
-		else if(ship.Position().Distance(ship.GetTargetPlanet()->Position()) < 100.)
+		else if(!ship.Position().OutOfRange(ship.GetTargetPlanet()->Position(), 100.))
 			ship.SetTargetPlanet(nullptr);
 	}
 	else if(ship.GetPersonality().IsStaying() && ship.GetSystem()->Objects().size())
@@ -932,11 +932,11 @@ void AI::Refuel(Ship &ship, Command &command)
 		for(const StellarObject &object : ship.GetSystem()->Objects())
 			if(object.GetPlanet() && object.GetPlanet()->HasSpaceport() && object.GetPlanet()->CanLand(ship))
 			{
-				double distance = ship.Position().Distance(object.Position());
-				if(distance < closest)
+				double distance2 = ship.Position().DistanceSquared(object.Position());
+				if(distance2 < closest)
 				{
 					ship.SetTargetPlanet(&object);
-					closest = distance;
+					closest = distance2;
 				}
 			}
 	}
@@ -991,11 +991,9 @@ bool AI::MoveTo(Ship &ship, Command &command, const Point &target, double radius
 	const Point &velocity = ship.Velocity();
 	const Angle &angle = ship.Facing();
 	Point distance = target - position;
-	
-	double speed = velocity.Length();
-	
-	bool isClose = distance.InRange(radius);  // was <
-	if(isClose && speed < slow)
+
+	bool isClose = !distance.OutOfRange(radius);  // was <
+	if(isClose && !velocity.OutOfRange(slow))
 		return true;
 	
 	bool shouldReverse = false;
@@ -1647,7 +1645,7 @@ Command AI::AutoFire(const Ship &ship, const list<shared_ptr<Ship>> &ships, bool
 					continue;
 			// Don't fire turrets at targets that are accelerating or decelerating
 			// rapidly due to hyperspace jumping.
-			if(weapon.IsTurret() && currentTarget->IsHyperspacing() && currentTarget->Velocity().Length() > 10.)
+			if(weapon.IsTurret() && currentTarget->IsHyperspacing() && currentTarget->Velocity().OutOfRange(10.))
 				continue;
 			// Don't fire secondary weapons as targets that have started jumping.
 			if(outfit->Icon() && currentTarget->IsEnteringHyperspace())
@@ -1659,7 +1657,7 @@ Command AI::AutoFire(const Ship &ship, const list<shared_ptr<Ship>> &ships, bool
 			// forward one time step.
 			p += v;
 			
-			if(p.Length() < outfit->BlastRadius())
+			if(p.InRange(outfit->BlastRadius())) // Don't blow ourselves up.  was <, not <=
 				continue;
 			
 			// If this is a homing weapon, it is not necessary to take the
