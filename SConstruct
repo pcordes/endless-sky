@@ -33,12 +33,12 @@ if env["mode"] == "lto":
 	flags += ["-flto=2", "-ffast-math", "-g"]  # 2 parallel optimization threads at link time
 	env.Append(LINKFLAGS = [flags])
 if env["mode"] == "debug":
-	flags += ["-g", "-Og"]
+	flags += ["-g", "-O0"]
 if env["mode"] == "profile":
 	flags += ["-g",  "-pg"]
 	env.Append(LINKFLAGS = ["-g", "-pg"])
 
-customflags = ["-ffast-math", "-g"]
+customflags = ["-g"]  # "-ffast-math", 
 flags += customflags
 env.Append(LINKFLAGS = customflags)
 
