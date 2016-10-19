@@ -393,15 +393,15 @@ bool Mask::WithinRange(Point point, Angle facing, double range) const
 	point = (-facing).Rotate(point);
 
 #ifdef __SSE2__
-	__m128 point_ps = _mm_cvtpd_ps(point);
-	const __m128 px = _mm_set1_ps(point_ps[0]);
-	const __m128 py = _mm_set1_ps(point_ps[1]);
+	__m128 minus_point_ps = _mm_cvtpd_ps(-point);    // + is commutative, which helps the compiler with AVX
+	const __m128 minus_px = _mm_set1_ps(minus_point_ps[0]);
+	const __m128 minus_py = _mm_set1_ps(minus_point_ps[1]);
 	const __m128 range2 = _mm_set1_ps(float(range*range));
 	for(const xy_interleave &curr : outline_simd)
 		for(unsigned j = 0; j < curr.vecSize; j+=4)
 		{
-			__m128 dx = _mm_load_ps(curr.x + j) - px;
-			__m128 dy = _mm_load_ps(curr.y + j) - py;
+			__m128 dx = _mm_load_ps(curr.x + j) + minus_px;
+			__m128 dy = _mm_load_ps(curr.y + j) + minus_py;
 			__m128 cmp = _mm_cmplt_ps(dx*dx - range2, dy*dy);  // transform the inequality for more ILP
 			if(_mm_movemask_ps(cmp))
 				return true;
