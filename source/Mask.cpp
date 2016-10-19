@@ -229,6 +229,8 @@ namespace {
 // must therefore be a 4-byte RGBA format.)
 void Mask::Create(const ImageBuffer *image)
 {
+	outline_simd.clear();
+
 	vector<Point> outline;  // used to be a class member
 	{
 	vector<Point> raw;
@@ -308,6 +310,7 @@ void Mask::Create(const ImageBuffer *image)
 	}
 */
 	radius = sqrt(rSquared);
+	outline_simd.shrink_to_fit();  // clear doesn't reduce capacity; this does
 }
 
 
