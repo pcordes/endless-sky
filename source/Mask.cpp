@@ -348,7 +348,10 @@ double Mask::Collide(Point sA, Point vA, Angle facing) const
 		return 0.;
 
 	// TODO: divide into quadrants, and only check the pieces of the outline in that quad if outline.size() > 16
-	return Intersection(sA, vA);
+	double tmp = Intersection(sA, vA);
+	if(tmp > 1.0 || tmp <= 0.0)
+		cerr << "Mask::Collide badness: tmp outside of 0..1.  tmp= " << tmp << '\n';
+	return tmp;
 }
 // d > r + vl
 // d^2 > (r+vl)^2           // distances are known to be non-negative
