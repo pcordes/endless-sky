@@ -229,7 +229,11 @@ inline Point &Point::operator-=(const Point &point)
 
 inline Point Point::operator-() const   // unary
 {
-	return Point() - *this;
+#ifdef __SSE2__
+	return Point(-v);
+#else
+	return Point(-x, -y);  // more efficient than  Point() - *this;  without -ffast-math
+#endif
 }
 
 
