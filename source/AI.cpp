@@ -1666,7 +1666,8 @@ Command AI::AutoFire(const Ship &ship, const list<shared_ptr<Ship>> &ships, bool
 				v = currentTarget->Velocity();
 			// Calculate how long it will take the projectile to reach its target.
 			double steps = Armament::RendezvousTime(p, v, vp);
-			if(steps == steps && steps <= lifetime)
+			if(steps == steps && steps <= lifetime)  // Why the explicit NaN check?  steps<=lifetime is false if unordered.  Does it break with -ffast-math?  -ffinite-math-only assumes no NaNs, and breaks steps==steps.  Even breaks isnan
+//			if(steps <= lifetime && !std::isnan(steps))
 			{
 				command.SetFire(index);
 				continue;
