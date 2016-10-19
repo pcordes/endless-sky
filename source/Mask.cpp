@@ -511,6 +511,7 @@ namespace {
 		return Ax * By - Ay * Bx;    // GNU vector extensions for operators instead of _mm functions
 	}
 
+	// result = newVal for elements where updateMask has the sign bit
 	inline __m128 __attribute__((unused)) blendOnSignBit(__m128 old, __m128 newVal, __m128 updateMask)
 	{
 #ifdef __SSE41__
@@ -520,8 +521,8 @@ namespace {
 		__m128i inew = _mm_castps_si128(newVal);
 		__m128i iupdate = _mm_srai_epi32(_mm_castps_si128(updateMask), 31);  // broadcast the sign bit
 		__m128i iblended = _mm_or_si128(
-		    _mm_and_si128(iupdate, iold),
-		    _mm_andnot_si128(iupdate, inew));
+		    _mm_andnot_si128(iupdate, iold),
+		    _mm_and_si128(iupdate, inew));
 		return _mm_castsi128_ps(iblended);
 #endif // SSE4.1
 	}
@@ -585,16 +586,20 @@ double Mask::Intersection(Point sA, Point vA) const
 					// and this is probably very rare
 
 					// broadcast the sign bit to make elements of all-zero or all-one
-					__m128 mask = _mm_castsi128_ps(_mm_srai_epi32(updateMin, 31));
+					//__m128 mask = _mm_castsi128_ps(_mm_srai_epi32(updateMin, 31));
 
 					// instead of blending after min, produce +Infinity in elements we don't want to update
 					// SSE math doesn't slow down on NaN or Inf, so this is fine
-					cross = _mm_andnot_ps(mask, cross);
+					//cross = _mm_and_ps(mask, cross);
 					// force uA to be positive, because -x / +0.0 is -Infinity
-					uA    = _mm_and_ps(uA, _mm_castsi128_ps(_mm_set1_epi32(0x7FFFFFFF)) );
+					//uA    = _mm_and_ps(uA, _mm_castsi128_ps(_mm_set1_epi32(0x7FFFFFFF)) );
 					__m128 uA_over_cross = _mm_div_ps(uA, cross);
-					closest = _mm_min_ps(uA_over_cross, closest); // if unordered, min takes the 2nd operand
-					//closest = blendOnSignBit(closest, newMin, updateMin);
+					__m128 newMin = _mm_min_ps(uA_over_cross, closest); // if unordered, min takes the 2nd operand
+					closest = blendOnSignBit(closest, newMin, _mm_castsi128_ps(updateMin));
+					if(_mm_movemask_ps(closest)) {
+					    cerr << "badness in Interesct\n";
+					    break;
+					}
 				}
 			}
 			i+=4;
