@@ -74,10 +74,16 @@ private:
 		float dy[vecSize];
 	};
 	std::vector<xy_interleave> outline_simd;
-//	std::vector<Point> outline;
 	double radius;
 public:
-	size_t OutlineCount() const { return outline_simd.size() * xy_interleave::vecSize; }
+#define USE_NONSIMD_OUTLINE
+#ifdef USE_NONSIMD_OUTLINE
+	std::vector<Point> outline;
+	const std::vector<Point> &Outline() const { return outline; }
+	size_t OutlineCount() const { return outline.size(); }
+#endif
+
+	size_t OutlineSIMDCount() const { return outline_simd.size() * xy_interleave::vecSize; }
 	double GetRadius() const { return radius; }
 	const std::vector<xy_interleave> &Outline_simd() const { return outline_simd; }
 };

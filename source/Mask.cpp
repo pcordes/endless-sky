@@ -29,7 +29,7 @@ Mask::Mask()
 
 const Mask Mask::emptymask;
 
-
+// Helpers for generating a Mask from an ImageBuffer
 namespace {
 	// Trace out a pixmap.
 	void Trace(const ImageBuffer *image, vector<Point> *raw)
@@ -212,7 +212,7 @@ namespace {
 		if(top == bottom)
 		{
 			// happens for the cloaked ship: no outline points
-			cerr << "couldn't find top and bottom points to simplify mask\n";
+			//cerr << "couldn't find top and bottom points to simplify mask\n";
 			return;
 		}
 
@@ -242,6 +242,10 @@ void Mask::Create(const ImageBuffer *image)
 	// destroy raw here, before allocating outline_simd
 	}
 
+#ifdef USE_NONSIMD_OUTLINE
+	this->outline = outline;
+#endif
+
 //	radius = Radius(outline);
 
 	if(outline.empty())
@@ -268,7 +272,7 @@ void Mask::Create(const ImageBuffer *image)
 		for(unsigned j=0 ; j<vecSize ; ++j)
 		{
 			Point curr = outline[i];
-			Point next = outline[i+1];  // doesn't go off the end because stop one before that
+			Point next = outline[i+1];  // doesn't go off the end because we stop one before that
 			tmp.x[j] = curr.X();
 			tmp.y[j] = curr.Y();
 //			outline_simd[i/4].x[j]
@@ -281,6 +285,7 @@ void Mask::Create(const ImageBuffer *image)
 			++i;  // loop over vector<Point>
 		}
 #ifdef __SSE2__
+// TODO: SIMD rSquared
 #else
 #endif
 		outline_simd.emplace_back(tmp);
@@ -468,8 +473,8 @@ double Mask::Range(Point point, Angle facing) const
 }
 
 
-
-#ifdef USE_OLD_OUTLINE
+//#define INTERSECT_NONSIMD_OUTLINE
+#ifdef INTERSECT_NONSIMD_OUTLINE
 double Mask::Intersection(Point sA, Point vA) const
 {
 	// Keep track of the closest intersection point found.
@@ -805,18 +810,21 @@ extern "C" int test_main(int argc, char*argv[])
 		msk.Create(img);
 		delete img;
 		printf("%s : %lu\n", argv[argc], msk.OutlineCount());
-/*
-		const vector<Point> &outline = msk.Outline();
-		Point prev = outline.back();
-		for (const Point &curr : outline) {
+
+		auto it = msk.Outline().cbegin();
+		for(auto& curr : msk.Outline_simd())
+		{
 			// std::numeric_limits<double>::min()
-			if (fabs( (prev-curr).X() ) <= 100*DBL_MIN && prev.X() != curr.X()) {
-				//	printf("%8g\t%8g\n", prev.X(), prev.Y());
-				printf("%8g\t%8g\tdx=%g\n", curr.X(), curr.Y(), (prev-curr).X());
+//			if (fabs( (prev-curr).X() ) <= 100*DBL_MIN && prev.X() != curr.X()) {
+			for(unsigned j=0; j<curr.vecSize; ++j) {
+				printf("   %8g\t%8g\t\tdx=%g\tdy=%g\n", curr.x[j], curr.y[j], curr.dx[j], curr.dy[j]);
+				if(it !=  msk.Outline().cend()) {
+					printf("   %8g\t%8g\n", it->X(), it->Y());
+					++it;
+				}
 			}
-			prev = curr;
 		}
-*/
+
 	}
 
 
