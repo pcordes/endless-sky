@@ -575,7 +575,7 @@ namespace {
 	// result = newVal for elements where updateMask has the sign bit
 	inline __m128 __attribute__((unused)) blendOnSignBit(__m128 old, __m128 newVal, __m128 updateMask)
 	{
-#ifdef __SSE41__
+#ifdef __SSE4_1__
 		return _mm_blendv_ps(old, newVal, updateMask);
 #else
 		__m128i iold = _mm_castps_si128(old);
