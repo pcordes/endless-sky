@@ -32,6 +32,8 @@ const Mask Mask::emptymask;
 namespace {
 
 	static constexpr bool DEBUG_SIMD = true;
+#define INSTRUMENT_BRANCHES        // print stats on early-outs taken or not
+
 	// Trace out a pixmap.
 	void Trace(const ImageBuffer *image, vector<Point> *raw)
 	{
@@ -329,11 +331,21 @@ void Mask::Create(const ImageBuffer *image)
 // is no collision, the return value is 1.
 double Mask::Collide(Point sA, Point vA, Angle facing) const
 {
+#ifdef INSTRUMENT_BRANCHES
+	static long count_collide (0);
+	++count_collide;
+#endif
 	// Bail out if we're too far away to possibly be touching.
 	double distance = sA.Length();
-	if(outline_simd.empty() || distance > radius + vA.Length())
+	if(outline_simd.empty() || distance > radius + vA.Length()) // typical: true 99% of the time
 		return 1.;
-	
+
+#ifdef INSTRUMENT_BRANCHES
+	static long count_noskip (0);
+	if( !(++count_noskip & ((1<<17)-1)) )
+		cerr << "Collide: took "<<count_collide - count_noskip<<"\t sqrt early outs of "<<count_collide <<
+			".   \t"<<(double)(count_collide - count_noskip)/count_collide * 100.<<"%\n";
+#endif
 	// Rotate into the mask's frame of reference.
 	sA = (-facing).Rotate(sA);
 	vA = (-facing).Rotate(vA);
@@ -345,8 +357,25 @@ double Mask::Collide(Point sA, Point vA, Angle facing) const
 	
 	// For simplicity, use a ray pointing straight downwards. A segment then
 	// intersects only if its x coordinates span the point's coordinates.
-	if(distance <= radius && Contains(sA))
-		return 0.;
+	if(distance <= radius) // typical: 1-2%
+	{
+#ifdef INSTRUMENT_BRANCHES
+		static long count_docontain(0);
+		if( !(++count_docontain & ((1<<12)-1)) )
+			cerr << "collide called Contains "<<count_docontain<<"\t of "<<count_noskip <<
+				" noskips.   \t"<<(double)(count_docontain)/count_noskip * 100.<<"%\n";
+#endif
+		if(Contains(sA))  // typical 35% taken
+			return 0.;
+		// would prob. be best to work in parallel with Intersect, instead of looping twice,
+		// But only *if* distance <= radius.  So we need two versions of Intersect.
+#ifdef INSTRUMENT_BRANCHES
+		static long count_nocontains(0);
+		if( !(++count_nocontains & ((1<<12)-1)) )
+			cerr << "collide::Contains early-out taken "<<count_docontain - count_nocontains<<"\t of "<<count_docontain <<
+				" calls.   \t"<<(double)(count_docontain - count_nocontains)/count_docontain * 100.<<"%\n";
+#endif
+	}
 
 	// TODO: divide into quadrants, and only check the pieces of the outline in that quad if outline.size() > 16
 	double tmpSIMD = Intersection(sA, vA);
@@ -582,7 +611,11 @@ double Mask::Intersection(Point sA, Point vA) const
 			//__m128 crossPositive = _mm_cmpgt_ps(cross, _mm_setzero_ps());
 			// early out if all elements have negative cross products
 			// it's ok to do extra work in the rare case where an element has cross = +0.
-			if(0b1111 != _mm_movemask_ps(cross))
+#ifdef INSTRUMENT_BRANCHES
+			static long count_cross = 0;
+			count_cross++;
+#endif
+			if(0b1111 != _mm_movemask_ps(cross))  // typical: saves false 15-20% of the time.  Terrible
 			{
 				__m128 vSx = _mm_load_ps(curr.x + i) - sAx_bcast; // Point vS = curr - sA;
 				__m128 vSy = _mm_load_ps(curr.y + i) - sAy_bcast;
@@ -602,7 +635,11 @@ double Mask::Intersection(Point sA, Point vA) const
 				__m128i updateMin = _mm_andnot_si128(uA_uB_or_cross_neg, _mm_castps_si128(uB_lt_cross));
 				// uB>=0. is true iff the sign bit is 0, except for negative 0.  We treat that as meaning less than 0 with underflow
 				// (uB >= 0.) & (uB < cross) & (uA >= 0.) & (cross > 0)
-				if(_mm_movemask_ps(_mm_castsi128_ps(updateMin)))
+#ifdef INSTRUMENT_BRANCHES
+				static long count_uAuB = 0;
+				count_uAuB++;
+#endif
+				if(_mm_movemask_ps(_mm_castsi128_ps(updateMin))) // typical: false 97-99% of the time
 				{
 					// divide + blend (without SSE4) are expensive enough to branch for,
 					// and this is probably very rare
@@ -610,7 +647,7 @@ double Mask::Intersection(Point sA, Point vA) const
 					// broadcast the sign bit to make elements of all-zero or all-one
 					//__m128 mask = _mm_castsi128_ps(_mm_srai_epi32(updateMin, 31));
 
-					// instead of blending after min, produce +Infinity in elements we don't want to update
+					// Use the condition to produce +Infinity in elements we don't want to update
 					// SSE math doesn't slow down on NaN or Inf, so this is fine
 					//cross = _mm_and_ps(mask, cross);
 					// force uA to be positive, because -x / +0.0 is -Infinity
@@ -624,7 +661,25 @@ double Mask::Intersection(Point sA, Point vA) const
 						break;
 					}
 				}
+#ifdef INSTRUMENT_BRANCHES
+				else
+				{
+					static long count_nodiv (0);
+					if( !(++count_nodiv & ((1<<20)-1)) )
+						cerr << "saved "<<count_nodiv<<"\tdiv+min+blend of "<<count_uAuB<<
+							".   \t"<<(double)count_nodiv/count_uAuB * 100.<<"%\n";
+				}
+#endif
 			}
+#ifdef INSTRUMENT_BRANCHES
+			else
+			{
+				static long count_noUA (0);
+				if( !(++count_noUA & ((1<<19)-1)) )
+					cerr << "saved "<<count_noUA<<"\tuA uB crosses of "<<count_cross<<
+						".   \t"<<(double)count_noUA/count_cross * 100.<<"%\n";
+			}
+#endif
 			i+=4;
 		}
 	}
