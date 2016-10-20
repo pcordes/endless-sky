@@ -78,6 +78,9 @@ private:
 public:
 #define USE_NONSIMD_OUTLINE
 #ifdef USE_NONSIMD_OUTLINE
+private:
+	double IntersectionNoSIMD(Point sA, Point vA) const;
+public:
 	std::vector<Point> outline;
 	const std::vector<Point> &Outline() const { return outline; }
 	size_t OutlineCount() const { return outline.size(); }

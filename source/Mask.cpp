@@ -29,8 +29,9 @@ Mask::Mask()
 
 const Mask Mask::emptymask;
 
-// Helpers for generating a Mask from an ImageBuffer
 namespace {
+
+	static constexpr bool DEBUG_SIMD = true;
 	// Trace out a pixmap.
 	void Trace(const ImageBuffer *image, vector<Point> *raw)
 	{
@@ -348,10 +349,22 @@ double Mask::Collide(Point sA, Point vA, Angle facing) const
 		return 0.;
 
 	// TODO: divide into quadrants, and only check the pieces of the outline in that quad if outline.size() > 16
-	double tmp = Intersection(sA, vA);
-	if(tmp > 1.0 || tmp <= 0.0)
-		cerr << "Mask::Collide badness: tmp outside of 0..1.  tmp= " << tmp << '\n';
-	return tmp;
+	double tmpSIMD = Intersection(sA, vA);
+
+	if(DEBUG_SIMD)
+	{
+		if(tmpSIMD > 1.0 || tmpSIMD <= 0.0)
+			cerr << "Mask::Collide badness: tmp outside of 0..1.  tmp= " << tmpSIMD << '\n';
+#ifdef USE_NONSIMD_OUTLINE
+		double tmpNoSIMD = IntersectionNoSIMD(sA, vA);
+		// some messages seen at 6 EPS.  very few at 8 EPS.  VERY few at 12.
+		// at 24EPS: less than one per minute of giant battle (500 sparrows + big ships)
+		// e.g. 0.828508 vs. 0.828511, which is one part in 2^18.  (or 3.6 * 10E-5)
+		if(fabs(tmpSIMD - tmpNoSIMD) > std::numeric_limits<float>::epsilon() * 24)
+			cerr << "Mask::Collide SIMD("<<tmpSIMD<<") - noSIMD("<< tmpNoSIMD<<") > FLT_EPS*24\n";
+#endif
+	}
+	return tmpSIMD;
 }
 // d > r + vl
 // d^2 > (r+vl)^2           // distances are known to be non-negative
@@ -476,9 +489,8 @@ double Mask::Range(Point point, Angle facing) const
 }
 
 
-//#define INTERSECT_NONSIMD_OUTLINE
-#ifdef INTERSECT_NONSIMD_OUTLINE
-double Mask::Intersection(Point sA, Point vA) const
+#ifdef USE_NONSIMD_OUTLINE
+double Mask::IntersectionNoSIMD(Point sA, Point vA) const
 {
 	// Keep track of the closest intersection point found.
 	double closest = 1.;
@@ -507,8 +519,8 @@ double Mask::Intersection(Point sA, Point vA) const
 	}
 	return closest;
 }
+#endif
 
-#else // outline_simd
 
 namespace {
 	inline float __attribute__((unused)) Crossf(float Ax, float Ay, float Bx, float By)
@@ -542,12 +554,11 @@ namespace {
 
 double Mask::Intersection(Point sA, Point vA) const
 {
+	// see the scalar version for comments explaining the algorithm
 #ifdef __SSE2__
 	// Keep track of the closest intersection point found.
 	__m128 closest = _mm_set1_ps(1.);
 
-//	float sAx = sA.X(), sAy = sA.Y();
-//	float vAx = vA.X(), vAy = vA.Y();
 	__m128 sA_ps = _mm_cvtpd_ps(sA);
 	const __m128 sAx_bcast = _mm_set1_ps(sA_ps[0]);
 	const __m128 sAy_bcast = _mm_set1_ps(sA_ps[1]);
@@ -607,9 +618,10 @@ double Mask::Intersection(Point sA, Point vA) const
 					__m128 uA_over_cross = _mm_div_ps(uA, cross);
 					__m128 newMin = _mm_min_ps(uA_over_cross, closest); // if unordered, min takes the 2nd operand
 					closest = blendOnSignBit(closest, newMin, _mm_castsi128_ps(updateMin));
-					if(_mm_movemask_ps(closest)) {
-					    cerr << "badness in Interesct\n";
-					    break;
+					if(DEBUG_SIMD && _mm_movemask_ps(closest))
+					{
+						cerr << "badness in Interesct\n";
+						break;
 					}
 				}
 			}
@@ -655,10 +667,8 @@ double Mask::Intersection(Point sA, Point vA) const
 		}
 	}
 	return closest;
-#endif
+#endif  // scalar version
 }
-
-#endif  // outline_simd for Intersection
 
 
 
