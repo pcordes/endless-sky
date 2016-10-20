@@ -867,6 +867,161 @@ bool Mask::Contains(Point point) const
  */
 
 
+
+
+double Mask::IntersectOrContains(Point sA, Point vA) const
+{
+#ifndef __SSE2__
+	if(Contains(sA))
+		return 0;
+	else
+		return Intersection(sA, vA);
+#else
+	// Do both checks in the same loop, since both need some of the same checks
+	__m128 sA_ps = _mm_cvtpd_ps(sA);
+	const __m128 sAx_bcast = _mm_set1_ps(sA_ps[0]);
+	const __m128 sAy_bcast = _mm_set1_ps(sA_ps[1]);
+	__m128 vA_ps = _mm_cvtpd_ps(vA);
+	const __m128 vAx_bcast = _mm_set1_ps(vA_ps[0]);
+	const __m128 vAy_bcast = _mm_set1_ps(vA_ps[1]);
+
+	// Intersection:
+	// Keep track of the closest intersection point found.
+	__m128 closest = _mm_set1_ps(1.);
+
+	// Contains:
+	__m128 intersections = _mm_setzero_ps();
+
+	for(const xy_interleave &curr : outline_simd)
+	{
+		for(unsigned i=0; i<xy_interleave::vecSize; )
+		{
+			IACA_START
+			// Intersection
+			__m128 vBx = _mm_load_ps(curr.dx + i);  // (next-curr).X
+			__m128 vBy = _mm_load_ps(curr.dy + i);
+
+			__m128 cross = Cross_ps(vBx,vBy, vAx_bcast,vAy_bcast); //vB.Cross(vA);
+#ifdef INSTRUMENT_BRANCHES
+			static long count_cross = 0;
+			count_cross++;
+#endif
+			__m128 vSx = _mm_load_ps(curr.x + i) - sAx_bcast; // Point vS = curr - sA;
+			__m128 vSy = _mm_load_ps(curr.y + i) - sAy_bcast;
+			__m128 uB = Cross_ps(vAx_bcast,vAy_bcast, vSx,vSy); // double uB = vA.Cross(vS);
+			__m128 uA = Cross_ps(vBx,vBy, vSx,vSy);             // double uA = vB.Cross(vS);
+
+			__m128 uB_lt_cross = _mm_cmplt_ps(uB, cross);
+			// use int vectors because we eventually feed into a shift to broadcast the sign bit
+			__m128i uB_or_cross_neg = _mm_or_si128(_mm_castps_si128(uB), _mm_castps_si128(cross));
+			__m128i uA_uB_or_cross_neg = _mm_or_si128(uB_or_cross_neg, _mm_castps_si128(uA));
+			// only the sign bit is the truth value
+
+			__m128i updateMin = _mm_andnot_si128(uA_uB_or_cross_neg, _mm_castps_si128(uB_lt_cross));
+			// uB>=0. is true iff the sign bit is 0, except for negative 0.  We treat that as meaning less than 0 with underflow
+			// (uB >= 0.) & (uB < cross) & (uA >= 0.) & (cross > 0)
+#ifdef INSTRUMENT_BRANCHES
+			static long count_uAuB = 0;
+			count_uAuB++;
+#endif
+			if(false  // FIXME: put this branch back in, unless the compiler is still pulling everything outside it
+			   || _mm_movemask_ps(_mm_castsi128_ps(updateMin))) // typical: false 97-99% of the time
+			{
+				__m128 uA_over_cross = _mm_div_ps(uA, cross);     // According to IACA, DIVPS is faster than RCPPS and a Newton iteration here.
+#if 1 //def __SSE4_1__
+				__m128 newMin = _mm_min_ps(uA_over_cross, closest);
+				closest = blendOnSignBit(closest, newMin, _mm_castsi128_ps(updateMin));
+#else
+				// broadcast the sign bit to make elements of all-zero or all-one
+				__m128i mask = _mm_srai_epi32(updateMin, 31);       // all-ones is -NaN(0xffff...)
+				// g++ before 7.0 treats _mm_min_ps as commutative (unlike the asm instruction),
+				// so we can't use this even without -ffast-math.
+				__m128 NaN_or_update = _mm_castsi128_ps(_mm_or_si128(mask, _mm_castps_si128(uA_over_cross)));
+				closest = _mm_min_ps(NaN_or_update, closest); // if unordered, MINPS takes the 2nd operand
+#endif
+				if(DEBUG_SIMD && _mm_movemask_ps(closest))
+				{
+					cerr << "badness in InteresctOrContains\n";
+					break;
+				}
+			}
+#ifdef INSTRUMENT_BRANCHES
+				else
+				{
+					static long count_nodiv (0);
+					if( !(++count_nodiv & ((1<<20)-1)) )
+						cerr << "saved "<<count_nodiv<<"\tdiv+min+blend of "<<count_uAuB<<
+							".   \t"<<(double)count_nodiv/count_uAuB * 100.<<"%\n";
+				}
+#endif
+
+
+			// Contains
+			__m128 currx = _mm_load_ps(curr.x + i);
+			//__m128 vBx  = _mm_load_ps(curr.dx + i);
+
+			//__m128 vSx = currx - sAx_bcast; // Point vS = curr - sA;
+			//__m128 cmpCurr = _mm_cmplt_ps(sAx_bcast, currx);  // 1 if sAx < curr.x
+			// vSx sign bit is 0 if sAx < curr.x, but also if sAx == curr.x
+			__m128 cmpCurr_inv = vSx;  // _mm_or_ps(vSx, _mm_cmpeq_ps(vSx, _mm_setzero_ps()));
+			// TODO: what happens on vSx == 0, and is it ok if xIntersect is wrong there?
+			// we're trying to do closed start, open end for each segment
+			// to avoid double counts when a point has the same x as a vertex
+
+			//__m128 nextx = currx + vBx;
+			//__m128 cmpNext = _mm_cmplt_ps(sAx_bcast, nextx);
+			// sAx < c.x + c.dx
+			// sAx - c.x < c.dx
+			// c.x - sAx > -c.dx
+			// c.x - sAx + c.dx > 0
+			__m128 cmpNext_inv = vSx + vBx;   // TODO: doesn't exclude 0.
+			// open start, closed end?
+			__m128 xIntersect = _mm_xor_ps(cmpCurr_inv, cmpNext_inv);
+
+
+			//__m128 curry = _mm_load_ps(curr.y + i);
+			//__m128 vBy = _mm_load_ps(curr.dy + i);
+/*
+
+			__m128 dcx = sAx_bcast - currx;
+			__m128 dcy = sAy_bcast - curry;
+			__m128 yGEpoint = _mm_cmpge_ps(vBy * dcx, vBx * dcy);  // compare cross product with 0
+
+			__m128 yGEpoint = _mm_cmpge_ps(vBy * (-vSx), vBx * (-vSy));
+			__m128 yGEpoint = _mm_cmplt_ps(vBy * vSx, vBx * vSy);  // 1 if vB cross(vS) is >= 0
+
+
+			__m128 uA = Cross_ps(vBx,vBy, vSx,vSy);             // double uA = vB.Cross(vS);
+			uA = vBx * vSy - vBy * vSx;	// negative if (vBx*vSy) < (vBy*vSx)
+*/
+			// TODO: test this, there's probably at least one logic error.
+			__m128 yGEpoint_inv = uA;
+			yGEpoint_inv = _mm_xor_ps(yGEpoint_inv, currx); // the inequality is inverted if curr.x is negative
+			__m128 yGEpoint = _mm_andnot_ps(yGEpoint_inv, xIntersect);
+			// sign bits have the truth values, we can use it directly without a compare
+			intersections = _mm_xor_ps(intersections, yGEpoint);
+
+			i+=4;
+		}
+	}
+	IACA_END
+	// Contains:
+	unsigned mask = _mm_movemask_ps(intersections);
+	mask ^= mask >> 2;   // parity of the 4-bit mask.  x86 has a parity flag, but IDK how to get a compiler to use it
+	mask ^= mask >> 1;
+	if (mask & 1)
+		return 0.;
+	// This horizontal op needs to happen separately from the min, because we need odd/even for the whole thing
+
+	// Intersection
+	__m128 high64 = _mm_movehl_ps(vAx_bcast, closest);   // vAx is just a convenient dead variable to avoid a MOVAPS
+	__m128 min64  = _mm_min_ps(closest, high64);
+	return min(min64[0], min64[1]);
+#endif // SSE2
+}
+
+
+
 #if 1 //def BENCHMARK_MASK
 
 /*

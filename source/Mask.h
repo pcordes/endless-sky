@@ -61,6 +61,7 @@ private:
 public:
 	double Intersection(Point sA, Point vA) const;
 	bool Contains(Point point) const;
+	double IntersectOrContains(Point sA, Point vA) const;  // both checks in one function
 	
 	
 private:
