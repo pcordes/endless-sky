@@ -616,13 +616,13 @@ double Mask::Intersection(Point sA, Point vA) const
 
 			__m128 cross = Cross_ps(vBx,vBy, vAx_bcast,vAy_bcast); //vB.Cross(vA);
 			//__m128 crossPositive = _mm_cmpgt_ps(cross, _mm_setzero_ps());
-			// early out if all elements have negative cross products
-			// it's ok to do extra work in the rare case where an element has cross = +0.
 #ifdef INSTRUMENT_BRANCHES
 			static long count_cross = 0;
 			count_cross++;
 #endif
-			if(0b1111 != _mm_movemask_ps(cross))  // typical: saves false 15-20% of the time.  Terrible
+			// early out if all elements have negative cross products
+			// it's ok to do extra work in the rare case where an element has cross = +0.
+			if(true || 0b1111 != _mm_movemask_ps(cross))  // typical: false 15-20% of the time.  Terrible
 			{
 				__m128 vSx = _mm_load_ps(curr.x + i) - sAx_bcast; // Point vS = curr - sA;
 				__m128 vSy = _mm_load_ps(curr.y + i) - sAy_bcast;
