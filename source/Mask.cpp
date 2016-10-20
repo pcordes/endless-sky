@@ -19,6 +19,20 @@ PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 #include <limits>
 #include <iostream>
 
+#ifdef IACA_MARKS
+//#include </opt/iaca-2.1/include/iacaMarks.h>
+#define IACA_SSC_MARK( MARK_ID )                                                \
+__asm__ __volatile__ (                                                          \
+                                          "\n\t  movl $"#MARK_ID", %%ebx"       \
+                                          "\n\t  .byte 0x64, 0x67, 0x90"        \
+                                          : : : /* "memory" */ );
+#define IACA_START  /*IACA_UD_BYTES */  IACA_SSC_MARK(111)
+#define IACA_END IACA_SSC_MARK(222) // IACA_UD_BYTES
+#else
+#define IACA_START
+#define IACA_END
+#endif
+
 using namespace std;
 
 // Default constructor.
@@ -33,6 +47,11 @@ namespace {
 
 	static constexpr bool DEBUG_SIMD = true;
 #define INSTRUMENT_BRANCHES        // print stats on early-outs taken or not
+
+#ifdef MASK_NODEBUG
+#undef  INSTRUMENT_BRANCHES
+#define DEBUG_SIMD false
+#endif
 
 	// Trace out a pixmap.
 	void Trace(const ImageBuffer *image, vector<Point> *raw)
@@ -611,6 +630,7 @@ double Mask::Intersection(Point sA, Point vA) const
 	for(const xy_interleave &curr : outline_simd)
 	{
 		for(unsigned i=0; i<xy_interleave::vecSize; ) {
+			IACA_START
 			__m128 vBx = _mm_load_ps(curr.dx + i);  // (next-curr).X
 			__m128 vBy = _mm_load_ps(curr.dy + i);
 
@@ -688,6 +708,7 @@ double Mask::Intersection(Point sA, Point vA) const
 			i+=4;
 		}
 	}
+	IACA_END
 	__m128 high64 = _mm_movehl_ps(vAx_bcast, closest);   // vAx is just a convenient dead variable to avoid a MOVAPS
 	__m128 min64  = _mm_min_ps(closest, high64);
 	return min(min64[0], min64[1]);
@@ -754,6 +775,7 @@ bool Mask::Contains(Point point) const
 	{
 		for(unsigned i=0; i<xy_interleave::vecSize; )
 		{
+			IACA_START
 			__m128 currx = _mm_load_ps(curr.x + i);
 			__m128 segx  = _mm_load_ps(curr.dx + i);
 			__m128 nextx = currx + segx;
@@ -778,6 +800,7 @@ bool Mask::Contains(Point point) const
 			i+=4;
 		}
 	}
+	IACA_END
 	unsigned mask = _mm_movemask_ps(intersections);
 	mask ^= mask >> 2;   // parity of the 4-bit mask.  x86 has a parity flag, but IDK how to get a compiler to use it
 	mask ^= mask >> 1;
