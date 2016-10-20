@@ -349,14 +349,7 @@ double Mask::Collide(Point sA, Point vA, Angle facing) const
 	// Rotate into the mask's frame of reference.
 	sA = (-facing).Rotate(sA);
 	vA = (-facing).Rotate(vA);
-	
-	// If this point is contained within the mask, a ray drawn out from it will
-	// intersect the mask an even number of times. If that ray coincides with an
-	// edge, ignore that edge, and count all segments as closed at the start and
-	// open at the end to avoid double-counting.
-	
-	// For simplicity, use a ray pointing straight downwards. A segment then
-	// intersects only if its x coordinates span the point's coordinates.
+
 	if(distance <= radius) // typical: 1-2%
 	{
 #ifdef INSTRUMENT_BRANCHES
@@ -395,20 +388,32 @@ double Mask::Collide(Point sA, Point vA, Angle facing) const
 	}
 	return tmpSIMD;
 }
+// avoiding sqrt in the early-out check:
+// sqrt(d2) > r + sqrt(vl2)
+
 // d > r + vl
 // d^2 > (r+vl)^2           // distances are known to be non-negative
 // d^2 > r^2 + 2*r*vl + vl^2
 // d^2 > r^2 + vl^2 + 2*sqrt(r^2*vl^2)
 // d^2 - r^2 > vl^2 + 2*sqrt(r^2*vl^2)
+
 // d2  - r*r > vl2  + 2*sqrt(r*r * vl2)    // d^2 and vl^2 are what we start with; distinguish from r^2
 // d2  - r*r - vl2  >  2*sqrt(r*r * vl2)
 // 0.5*(d2  - r*r - vl2)  > sqrt(r*r * vl2)
+// maybe use rsqrtss?  With a fudge factor like 0.51 instead of 0.5?
+// Maybe store 4.04*r*r in the mask?
+// TODO: how does the original compile with -ffast-math?  Using rsqrt?
 
 // 0.5*(d2  - r*r - vl2)  > r * sqrt(vl2)
-// (d2  - r*r - vl2)^2  > (r*r) * (4 * vl2) && (d2  - r*r - vl2) > 0
+// (d2  - r*r - vl2)^2  > (r*r) * (4 * vl2) && (d2  - r*r - vl2) > 0   // d2-r^2-vl2 isn't known to be non-negative
 
-// vs
-//sqrt(d^2) > r + sqrt(vl^2)
+// sqrt(d2)*rsqrt(vl2) > r*rsqrt(vl2) + 1  (if vl2>0)
+//          rsqrt(vl2) > rsqrt(d2) * (r*rsqrt(vl2) + 1)  (if vl2!=0 && d2!=0)  i.e. if(0.!=or_ps(vl2, d2))
+
+// sqrt(d2) - sqrt(vl2) > r
+// 1 - rsqrt(d2)*sqrt(vl2) > r*rsqrt(d2)
+// rsqrt(vl2) - rsqrt(d2) > r*rsqrt(d2)*rsqrt(vl2)      (if vl2!=0 && d2!=0)
+
 
 
 // Check whether the mask contains the given point.
@@ -534,12 +539,16 @@ double Mask::IntersectionNoSIMD(Point sA, Point vA) const
 		double cross = vB.Cross(vA);
 		if(cross > 0.)
 		{
+			// For terminology and math: http://devmag.org.za/2009/04/13/basic-collision-detection-in-2d-part-1/
 			Point vS = prev - sA;
-			double uB = vA.Cross(vS);
-			double uA = vB.Cross(vS);
+			double uB = vA.Cross(vS);  // uB/cross = position along the mask segment (vB)
+			double uA = vB.Cross(vS);  // uA/cross = position along query line (vA), scaled to its length (0 to 1)
 			// If the intersection occurs somewhere within this segment of the
 			// outline, find out how far along the query vector it occurs and
 			// remember it if it is the closest so far.
+
+			// uB<cross checks that the uB/cross < 1.0, i.e. the intersection is within vB
+			// uA/cross is checked by min, since we start with closest=1
 			if((uB >= 0.) & (uB < cross) & (uA >= 0.))
 				closest = min(closest, uA / cross);
 		}
@@ -601,8 +610,6 @@ double Mask::Intersection(Point sA, Point vA) const
 	//float prevx = outline_simd.back().x[xy_interleave::vecSize-1];
 	for(const xy_interleave &curr : outline_simd)
 	{
-		// cross == 0. means parallel.  cross > 0 means it's a point where the segment is
-		// entering the polygon rather than exiting it; we only handle that case.
 		for(unsigned i=0; i<xy_interleave::vecSize; ) {
 			__m128 vBx = _mm_load_ps(curr.dx + i);  // (next-curr).X
 			__m128 vBy = _mm_load_ps(curr.dy + i);
@@ -621,9 +628,6 @@ double Mask::Intersection(Point sA, Point vA) const
 				__m128 vSy = _mm_load_ps(curr.y + i) - sAy_bcast;
 				__m128 uB = Cross_ps(vAx_bcast,vAy_bcast, vSx,vSy); // double uB = vA.Cross(vS);
 				__m128 uA = Cross_ps(vBx,vBy, vSx,vSy);             // double uA = vB.Cross(vS);
-				// If the intersection occurs somewhere within this segment of the
-				// outline, find out how far along the query vector it occurs and
-				// remember it if it is the closest so far.
 
 				// TODO: camelCase these varnames somehow, even though they already include caps?
 				__m128 uB_lt_cross = _mm_cmplt_ps(uB, cross);
@@ -653,6 +657,7 @@ double Mask::Intersection(Point sA, Point vA) const
 					// force uA to be positive, because -x / +0.0 is -Infinity
 					//uA    = _mm_and_ps(uA, _mm_castsi128_ps(_mm_set1_epi32(0x7FFFFFFF)) );
 					__m128 uA_over_cross = _mm_div_ps(uA, cross);
+					// possibly worth using rcpps, esp. if we don't need a Newton iteration
 					__m128 newMin = _mm_min_ps(uA_over_cross, closest); // if unordered, min takes the 2nd operand
 					closest = blendOnSignBit(closest, newMin, _mm_castsi128_ps(updateMin));
 					if(DEBUG_SIMD && _mm_movemask_ps(closest))
@@ -728,7 +733,6 @@ double Mask::Intersection(Point sA, Point vA) const
 
 
 
-// outline_simd version
 bool Mask::Contains(Point point) const
 {
 	// If this point is contained within the mask, a ray drawn out from it will
@@ -769,6 +773,7 @@ bool Mask::Contains(Point point) const
 				yGEpoint = _mm_and_ps(yGEpoint, xIntersect);
 				// sign bits have the truth values, we can use it directly without a compare
 				intersections = _mm_xor_ps(intersections, yGEpoint);
+				// TODO: verify that we're properly treating segments as closed start, open end to avoid double counts
 			}
 			i+=4;
 		}
@@ -777,7 +782,7 @@ bool Mask::Contains(Point point) const
 	mask ^= mask >> 2;   // parity of the 4-bit mask.  x86 has a parity flag, but IDK how to get a compiler to use it
 	mask ^= mask >> 1;
 	return mask & 1;
-#else
+#else // scalar
 	bool intersections_odd = false;
 	const float Vx = point.X();
 	const float Vy = point.Y();
@@ -808,7 +813,7 @@ bool Mask::Contains(Point point) const
 	}
 	// If the number of intersections is odd, the point is within the mask.
 	return intersections_odd;
-#endif
+#endif // scalar
 }
 
 /*
